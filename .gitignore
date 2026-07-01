@@ -1,23 +1,31 @@
 # ── Environment variables ──
 .env
-.env.*
+.env.local
+.env.*.local
 !.env.example
+
+
 
 # ── Python ───
 __pycache__/
 *.py[cod]
 *.pyo
+*.pyd
 .Python
+
 venv/
 env/
 .venv/
-*.egg-info/
 
-# Python build / packaging
+*.egg-info/
 dist/
 build/
+
 .pytest_cache/
 .mypy_cache/
+
+
+
 
 # ── Node / React ────
 node_modules/
@@ -28,10 +36,12 @@ frontend/dist/
 npm-debug.log*
 yarn-error.log*
 
+
 # ── Database ─────
 *.sqlite
 *.sqlite3
 *.db
+
 
 # ── IDE / OS ─────
 .vscode/
@@ -40,19 +50,26 @@ yarn-error.log*
 Thumbs.db
 *.swp
 
+
 # ── Uploads / Data files ──────
 uploads/
 *.csv
 *.xlsx
 *.xls
 
+
 # ── Machine Learning files ──────
 *.pkl
 *.joblib
-models/
+*.h5
+*.pt
+*.onnx
+models/*.pkl
+models/*.joblib
 
 # ── Logs ─────
 *.log
+logs/
 
 # ── Docker ────────
 docker-compose.override.yml

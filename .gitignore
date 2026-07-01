@@ -1,0 +1,47 @@
+# ── Environment variables (NEVER commit these) ────
+.env
+.env.*
+!.env.example        ← this one IS committed (template, no real secrets)
+
+# ── Python ───────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+.Python
+venv/
+env/
+.venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+
+# ── Node / React ──────────────────────────────────
+node_modules/
+frontend/build/
+frontend/dist/
+.next/
+npm-debug.log*
+yarn-error.log*
+
+# ── Database ──────────────────────────────────────
+*.sqlite
+*.sqlite3
+*.db
+
+# ── IDE / OS ──────────────────────────────────────
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+
+# ── Uploads / Data files ──────────────────────────
+uploads/
+*.csv
+*.xlsx
+*.xls
+
+# ── Docker (added later) ──────────────────────────
+# docker-compose.override.yml

@@ -1,9 +1,9 @@
-# ── Environment variables (NEVER commit these) ────
+# ── Environment variables ──
 .env
 .env.*
 !.env.example        ← this one IS committed (template, no real secrets)
 
-# ── Python ───────────────────────────────────────
+# ── Python ───
 __pycache__/
 *.py[cod]
 *.pyo
@@ -17,7 +17,7 @@ build/
 .pytest_cache/
 .mypy_cache/
 
-# ── Node / React ──────────────────────────────────
+# ── Node / React ────
 node_modules/
 frontend/build/
 frontend/dist/
@@ -25,23 +25,23 @@ frontend/dist/
 npm-debug.log*
 yarn-error.log*
 
-# ── Database ──────────────────────────────────────
+# ── Database ─────
 *.sqlite
 *.sqlite3
 *.db
 
-# ── IDE / OS ──────────────────────────────────────
+# ── IDE / OS ─────
 .vscode/
 .idea/
 .DS_Store
 Thumbs.db
 *.swp
 
-# ── Uploads / Data files ──────────────────────────
+# ── Uploads / Data files ──────
 uploads/
 *.csv
 *.xlsx
 *.xls
 
-# ── Docker (added later) ──────────────────────────
+# ── Docker if required  ────────
 # docker-compose.override.yml

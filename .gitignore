@@ -1,7 +1,7 @@
 # ── Environment variables ──
 .env
 .env.*
-!.env.example        ← this one IS committed (template, no real secrets)
+!.env.example
 
 # ── Python ───
 __pycache__/
@@ -12,6 +12,8 @@ venv/
 env/
 .venv/
 *.egg-info/
+
+# Python build / packaging
 dist/
 build/
 .pytest_cache/
@@ -19,6 +21,7 @@ build/
 
 # ── Node / React ────
 node_modules/
+frontend/node_modules/
 frontend/build/
 frontend/dist/
 .next/
@@ -43,5 +46,13 @@ uploads/
 *.xlsx
 *.xls
 
-# ── Docker if required  ────────
-# docker-compose.override.yml
+# ── Machine Learning files ──────
+*.pkl
+*.joblib
+models/
+
+# ── Logs ─────
+*.log
+
+# ── Docker ────────
+docker-compose.override.yml

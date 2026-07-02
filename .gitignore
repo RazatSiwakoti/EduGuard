@@ -1,47 +1,75 @@
-# ── Environment variables (NEVER commit these) ────
+# ── Environment variables ──
 .env
-.env.*
-!.env.example        ← this one IS committed (template, no real secrets)
+.env.local
+.env.*.local
+!.env.example
 
-# ── Python ───────────────────────────────────────
+
+
+# ── Python ───
 __pycache__/
 *.py[cod]
 *.pyo
+*.pyd
 .Python
+
 venv/
 env/
 .venv/
+
 *.egg-info/
 dist/
 build/
+
 .pytest_cache/
 .mypy_cache/
 
-# ── Node / React ──────────────────────────────────
+
+
+
+# ── Node / React ────
 node_modules/
+frontend/node_modules/
 frontend/build/
 frontend/dist/
 .next/
 npm-debug.log*
 yarn-error.log*
 
-# ── Database ──────────────────────────────────────
+
+# ── Database ─────
 *.sqlite
 *.sqlite3
 *.db
 
-# ── IDE / OS ──────────────────────────────────────
+
+# ── IDE / OS ─────
 .vscode/
 .idea/
 .DS_Store
 Thumbs.db
 *.swp
 
-# ── Uploads / Data files ──────────────────────────
+
+# ── Uploads / Data files ──────
 uploads/
 *.csv
 *.xlsx
 *.xls
 
-# ── Docker (added later) ──────────────────────────
-# docker-compose.override.yml
+
+# ── Machine Learning files ──────
+*.pkl
+*.joblib
+*.h5
+*.pt
+*.onnx
+models/*.pkl
+models/*.joblib
+
+# ── Logs ─────
+*.log
+logs/
+
+# ── Docker ────────
+docker-compose.override.yml

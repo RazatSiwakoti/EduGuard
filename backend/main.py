@@ -1,5 +1,10 @@
 """
 EduGuard FastAPI Application Entry Point.
+
+Table creation is now handled entirely by Alembic migrations —
+create_all() and the model imports it required have been removed
+from here on purpose, so there's exactly one source of truth for
+schema changes (alembic/versions/), not two.
 """
 
 from fastapi import Depends, FastAPI
@@ -7,23 +12,17 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.database import engine, get_db
-from app.models import User
-from app.models.base import Base
-
-# NOTE: Base.metadata.create_all() intentionally removed here.
-# Once Alembic is introduced in Phase 1, migrations — not app startup —
-# should own table creation, to avoid schema drift between the two.
+from app.database import get_db
 
 app = FastAPI(
     title=settings.APP_NAME,
     debug=settings.DEBUG
 )
 
-Base.metadata.create_all(bind=engine)
 
 @app.get("/")
 def root():
+    """Basic liveness check — confirms the API process itself is running."""
     return {
         "message": "EduGuard API running",
         "environment": settings.ENVIRONMENT
@@ -32,8 +31,10 @@ def root():
 
 @app.get("/health")
 def health_check(db: Session = Depends(get_db)):
-    # Actually exercises the DB connection, not just a static response —
-    # this is what proves the .env path fix and DATABASE_URL are correct
+    """
+    Confirms the API can actually reach PostgreSQL, not just that
+    FastAPI booted. Runs a trivial SELECT 1 against the live connection.
+    """
     try:
         db.execute(text("SELECT 1"))
         db_status = "connected"
@@ -44,4 +45,3 @@ def health_check(db: Session = Depends(get_db)):
         "status": "ok",
         "database": db_status
     }
-

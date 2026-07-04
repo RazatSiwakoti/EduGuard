@@ -1,6 +1,5 @@
 """
 JWT access token creation and verification.
-
 Design:
 - Stateless authentication (no refresh tokens in Phase 2)
 - Role embedded for fast authorization
@@ -17,7 +16,6 @@ from app.models.enums import UserRole
 def create_access_token(user_id: int, role: UserRole) -> str:
     """
     Create a signed JWT access token for authenticated users.
-
     Claims:
         sub  -> user ID (JWT standard subject)
         role -> user role for RBAC (ADMIN / LECTURER / SUPER_ADMIN)
@@ -26,7 +24,6 @@ def create_access_token(user_id: int, role: UserRole) -> str:
     """
 
     now = datetime.now(timezone.utc)
-
     expire = now + timedelta(
         minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
     )

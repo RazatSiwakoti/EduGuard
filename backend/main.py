@@ -14,11 +14,16 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import get_db
 
+from app.api.routes.auth import router as auth_router
+
+
 app = FastAPI(
     title=settings.APP_NAME,
     debug=settings.DEBUG
 )
 
+#register routers
+app.include_router(auth_router)
 
 @app.get("/")
 def root():

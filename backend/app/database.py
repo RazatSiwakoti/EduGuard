@@ -3,10 +3,10 @@ Database connection and SQLAlchemy setup.
 """
 
 from sqlalchemy import create_engine
-from sqlalchemy.orm import declarative_base, sessionmaker
+from sqlalchemy.orm import sessionmaker
 
 from app.config import settings
-from app.models.base import Base  
+from app.models.base import Base
 
 
 DATABASE_URL = settings.DATABASE_URL
@@ -19,7 +19,7 @@ engine = create_engine(
 )
 
 
-# Database session
+# Database session factory
 SessionLocal = sessionmaker(
     autocommit=False,
     autoflush=False,
@@ -29,11 +29,8 @@ SessionLocal = sessionmaker(
 
 # Dependency for FastAPI routes
 def get_db():
-
     db = SessionLocal()
-
     try:
         yield db
-
     finally:
         db.close()

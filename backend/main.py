@@ -15,6 +15,9 @@ from app.config import settings
 from app.database import get_db
 
 from app.api.routes.auth import router as auth_router
+from app.api.routes.super_admin import router as super_admin_router
+from app.api.routes.admin import router as admin_router
+from app.api.routes.units import router as units_router
 
 
 app = FastAPI(
@@ -24,6 +27,9 @@ app = FastAPI(
 
 #register routers
 app.include_router(auth_router)
+app.include_router(super_admin_router)
+app.include_router(admin_router)
+app.include_router(units_router)
 
 @app.get("/")
 def root():

@@ -35,9 +35,6 @@ class User(Base):
         Enum(
             UserRole,
             name="userrole",
-            # Without this, SQLAlchemy persists the enum MEMBER NAME
-            # (e.g. "SUPER_ADMIN"), not its value. This forces it to store the lowercase value instead ("super_admin"),
-            # matching what the migration below creates in Postgres.
             values_callable=lambda enum_cls: [member.value for member in enum_cls],
         ),
         nullable=False,
@@ -47,6 +44,7 @@ class User(Base):
 
     # Audit fields
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
     updated_at = Column(
         DateTime(timezone=True),
         server_default=func.now(),

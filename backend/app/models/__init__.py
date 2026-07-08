@@ -6,3 +6,4 @@ from app.models.criteria import Criteria
 from app.models.rule_version import RuleVersion
 from app.models.assessment_event import AssessmentEvent
 from app.models.risk_score import RiskScore
+from app.models.ingestion_batch import IngestionBatch

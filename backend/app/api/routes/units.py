@@ -58,14 +58,29 @@ def _get_lecturer_or_404(db: Session, lecturer_id: int) -> User:
 # -------------------------
 @router.post("", response_model=UnitOut, status_code=status.HTTP_201_CREATED)
 def create_unit(payload: UnitCreate, db: Session = Depends(get_db)):
-    existing = db.query(Unit).filter(Unit.unit_code == payload.unit_code).first()
+    # Uniqueness is now on the (unit_code, year, teaching_period) combo,
+    # not unit_code alone - the same subject can be taught every semester.
+    existing = (
+        db.query(Unit)
+        .filter(
+            Unit.unit_code == payload.unit_code,
+            Unit.year == payload.year,
+            Unit.teaching_period == payload.teaching_period,
+        )
+        .first()
+    )
     if existing:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Unit code already in use")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This unit offering (code + year + teaching period) already exists",
+        )
 
     new_unit = Unit(
         unit_code=payload.unit_code,
         unit_name=payload.unit_name,
         start_date=payload.start_date,
+        year=payload.year,
+        teaching_period=payload.teaching_period,
     )
 
     if payload.lecturer_id is not None:

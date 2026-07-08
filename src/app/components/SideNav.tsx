@@ -18,11 +18,12 @@ const mainNavItems = [
   { icon: BarChart2, label: "Reports", to: "/reports" },
 ];
 
+{/* EdGuard System selection 
 const systemNavItems = [
   { icon: Database, label: "Import", to: "/reports" },
   { icon: Mail, label: "Email Logs", to: "/alerts" },
   { icon: FileText, label: "Reports Export", to: "/reports" },
-];
+];*/}
 
 export function SideNav() {
   const { isDark } = useTheme();
@@ -140,7 +141,7 @@ export function SideNav() {
           </NavLink>
         ))}
 
-        {/* EdGuard System Section */}
+        {/* EdGuard System Section 
         <div style={{ padding: "16px 0 8px 0", marginTop: "8px", borderTop: `1px solid ${isDark ? "rgba(255,255,255,0.07)" : "#E5E7EB"}` }}>
           <span
             style={{
@@ -182,7 +183,7 @@ export function SideNav() {
               </>
             )}
           </NavLink>
-        ))}
+        ))}*/}
       </nav>
 
       {/* Bottom: Academic Year */}

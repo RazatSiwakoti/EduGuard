@@ -1,8 +1,8 @@
 import { Download, ExternalLink, ChevronUp, ChevronDown, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { useState, useMemo } from "react";
-import { allStudents, riskConfig, type Student, type RiskLevel } from "../data/studentData";
-
-export type { RiskLevel, Student };
+import { riskConfig, type RiskLevel } from "../data/studentData"; //removed Allstudents import as it is no longer used, now using students from api
+import type { StudentOverview } from "../api/students"; //added Student import to use the Student type in the StudentTable component
+export type { RiskLevel, StudentOverview };
 
 const barColorMap: Record<RiskLevel, string> = {
   HIGH: "#E24B4A",
@@ -18,25 +18,28 @@ function MiniBar({ value, max, risk }: { value: number; max: number; risk: RiskL
   );
 }
 
-function TrendIcon({ trend }: { trend: Student["trend"] }) {
+function TrendIcon({ trend,
+}: {
+  trend: StudentOverview["trend"];
+}) { //changed trend prop type to use StudentOverview type instead of RiskLevel
   if (trend === "improving") return <TrendingUp size={13} color="#16A34A" />;
   if (trend === "deteriorating") return <TrendingDown size={13} color="#DC2626" />;
   return <Minus size={13} color="#9CA3AF" />;
 }
 
-type SortKey = "name" | "attendance" | "gpa" | "assignments" | "mlScore";
+type SortKey = "name" | "attendance" | "gpa"  | "mlScore";
 type SortDir = "asc" | "desc";
 
 const PAGE_SIZE = 8;
 
 interface StudentTableProps {
+  students: StudentOverview[]; //added student array prop to StudentTableProps to pass the students data from StudentsPage
   searchQuery: string;
   riskFilter: string;
   subjectFilter?: string;
-  onViewStudent: (student: Student) => void;
 }
 
-export function StudentTable({ searchQuery, riskFilter, subjectFilter, onViewStudent }: StudentTableProps) {
+export function StudentTable({ students, searchQuery, riskFilter, subjectFilter }: StudentTableProps) {  //added student array prop to StudentTableProps to pass the students data from StudentsPage
   const [sortKey, setSortKey] = useState<SortKey>("attendance");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [page, setPage] = useState(1);
@@ -52,15 +55,15 @@ export function StudentTable({ searchQuery, riskFilter, subjectFilter, onViewStu
   };
 
   const filtered = useMemo(() => {
-    let list = [...allStudents];
+    let list = [...students];//changed from allStudents to students to use the data fetched from the API 
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       list = list.filter(
         (s) =>
           s.name.toLowerCase().includes(q) ||
-          s.subject.toLowerCase().includes(q) ||
-          s.studentId.toLowerCase().includes(q) ||
-          s.program.toLowerCase().includes(q)
+          (s.subject ?? "").toLowerCase().includes(q) || //added nullish coalescing operator to handle cases where subject is undefined
+          s.studentId.toLowerCase().includes(q)
+          // s.program.toLowerCase().includes(q) removed program filter as it is no longer needed
       );
     }
     if (riskFilter !== "All") {
@@ -69,23 +72,46 @@ export function StudentTable({ searchQuery, riskFilter, subjectFilter, onViewStu
     if (subjectFilter && subjectFilter !== "All") {
       list = list.filter((s) => s.subject === subjectFilter);
     }
-    list.sort((a, b) => {
-      let av: number, bv: number;
-      if (sortKey === "name") { av = a.name.charCodeAt(0); bv = b.name.charCodeAt(0); }
-      else if (sortKey === "attendance") { av = a.attendance; bv = b.attendance; }
-      else if (sortKey === "gpa") { av = a.gpa; bv = b.gpa; }
-      else if (sortKey === "mlScore") { av = a.mlScore; bv = b.mlScore; }
-      else { av = a.assignments.done / a.assignments.total; bv = b.assignments.done / b.assignments.total; }
-      return sortDir === "asc" ? av - bv : bv - av;
-    });
-    return list;
+  //   list.sort((a, b) => {
+  //     let av: number, bv: number;
+  //     if (sortKey === "name") { av = a.name.charCodeAt(0); bv = b.name.charCodeAt(0); }
+  //     else if (sortKey === "attendance") { av = a.attendance; bv = b.attendance; }
+  //     else if (sortKey === "gpa") { av = a.gpa; bv = b.gpa; }
+  //     else if (sortKey === "mlScore") { av = a.mlScore; bv = b.mlScore; }
+  //     else { av = a.mlScore; bv = b.mlScore; } //changed assignemnt to MLScore for now, as it is the only remaining sortable column, and to avoid TypeScript error
+  //     return sortDir === "asc" ? av - bv : bv - av;
+  //   });
+  //   return list;
+  // }, [searchQuery, riskFilter, subjectFilter, sortKey, sortDir]);
+
+  //temp? sort list?
+  list.sort((a, b) => {
+  let av: number;
+  let bv: number;
+
+  if (sortKey === "name") {
+    av = a.name.charCodeAt(0);
+    bv = b.name.charCodeAt(0);
+  } else if (sortKey === "attendance") {
+    av = a.attendance;
+    bv = b.attendance;
+  } else if (sortKey === "gpa") {
+    av = a.gpa;
+    bv = b.gpa;
+  } else {
+    av = a.mlScore;
+    bv = b.mlScore;
+  }
+
+  return sortDir === "asc" ? av - bv : bv - av;
+});return list;
   }, [searchQuery, riskFilter, subjectFilter, sortKey, sortDir]);
 
   const handleExportCSV = () => {
-    const headers = ["Name", "Student ID", "Subject", "Program", "Attendance %", "GPA", "Assignments", "Risk", "Trend", "ML Score", "Confidence"];
+    const headers = ["Name", "Student ID", "Subject",  "Attendance %", "GPA", "Risk", "Trend", "ML Score", "Confidence"]; //removed Program header as it is no longer needed so is assignments is is work in progress
     const rows = filtered.map((s) => [
-      s.name, s.studentId, s.subject, s.program, s.attendance, s.gpa,
-      `${s.assignments.done}/${s.assignments.total}`, s.risk, s.trend,
+      s.name, s.studentId, s.subject ?? "", s.attendance, s.gpa,//removed nullish coalescing operator to handle cases where subject is undefined
+       s.risk, s.trend,//`${s.assignments.done}/${s.assignments.total}`, removed for now as assignments is still in progress, and to avoid confusion with the other columns
       s.mlScore.toFixed(2), `${s.confidence}%`,
     ]);
     const csv = [headers, ...rows].map((r) => r.join(",")).join("\n");
@@ -112,7 +138,7 @@ export function StudentTable({ searchQuery, riskFilter, subjectFilter, onViewStu
     { label: "Student", sortKey: "name" },
     { label: "Attendance", sortKey: "attendance" },
     { label: "GPA", sortKey: "gpa" },
-    { label: "Assignments", sortKey: "assignments" },
+    { label: "Assignments" },//removed sortKey for assignments as it is still in progress
     { label: "ML Score", sortKey: "mlScore" },
     { label: "Risk Level" },
     { label: "Trend" },
@@ -223,15 +249,29 @@ export function StudentTable({ searchQuery, riskFilter, subjectFilter, onViewStu
                       </div>
                     </td>
 
-                    {/* Assignments */}
-                    <td style={{ padding: "12px 16px", borderBottom: "1px solid #F3F4F6" }}>
+                    {/* Assignments old*/}
+                    {/* <td style={{ padding: "12px 16px", borderBottom: "1px solid #F3F4F6" }}>
                       <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
                         <span style={{ color: "#1A1A2E", fontSize: "13px", fontWeight: "500" }}>
                           {student.assignments.done}/{student.assignments.total}
                         </span>
                         <MiniBar value={student.assignments.done} max={student.assignments.total} risk={student.risk} />
                       </div>
-                    </td>
+                    </td> */}
+
+                      {/* Assignments */}
+                    <td style={{ padding: "12px 16px", borderBottom: "1px solid #F3F4F6" }}>
+                      <span
+                      title="Assessment integration not connected yet"
+                      style={{
+                        color: "#9CA3AF",
+                        fontSize: "13px",
+                        fontWeight: "600",
+                      }}
+                          >
+                            ??
+                          </span>
+                        </td>
 
                     {/* ML Score */}
                     <td style={{ padding: "12px 16px", borderBottom: "1px solid #F3F4F6" }}>
@@ -264,12 +304,16 @@ export function StudentTable({ searchQuery, riskFilter, subjectFilter, onViewStu
                     {/* Action */}
                     <td style={{ padding: "12px 16px", borderBottom: "1px solid #F3F4F6" }}>
                       <button
-                        onClick={() => onViewStudent(student)}
-                        style={{ display: "flex", alignItems: "center", gap: "5px", padding: "5px 12px", background: "transparent", border: "1.5px solid #E5E7EB", borderRadius: "7px", cursor: "pointer", color: "#185FA5", fontSize: "12px", fontWeight: "600", whiteSpace: "nowrap", transition: "all 0.15s" }}
+                        disabled
+                        title="View student details (coming soon)"
+                        // onClick={() => onViewStudent(student)}
+                        //style={{ display: "flex", alignItems: "center", gap: "5px", padding: "5px 12px", background: "transparent", border: "1.5px solid #E5E7EB", borderRadius: "7px", cursor: "pointer", color: "#185FA5", fontSize: "12px", fontWeight: "600", whiteSpace: "nowrap", transition: "all 0.15s" }}
+                        style={{display: "flex", alignItems: "center", gap: "5px", padding: "5px 12px", background: "#F3F4F6", border: "1.5px solid #E5E7EB", borderRadius: "7px", cursor: "not-allowed", color: "#9CA3AF", fontSize: "12px", fontWeight: "600", whiteSpace: "nowrap",}}
                         onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.borderColor = "#185FA5"; (e.currentTarget as HTMLButtonElement).style.background = "#EBF4FF"; }}
                         onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.borderColor = "#E5E7EB"; (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}
                       >
-                        <ExternalLink size={11} color="#185FA5" />
+                        {/* <ExternalLink size={11} color="#185FA5" /> just disabled for now */}
+                        <ExternalLink size={11} color="#9CA3AF" />
                         View
                       </button>
                     </td>

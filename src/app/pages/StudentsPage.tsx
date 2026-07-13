@@ -1,8 +1,14 @@
-import { useState } from "react";
+//import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { StudentDetailModal } from "../components/StudentDetailModal";
 import { StudentTable } from "../components/StudentTable";
-import { allStudents, riskConfig, type Student, type RiskLevel } from "../data/studentData";
+//import { allStudents, riskConfig, type Student, type RiskLevel } from "../data/studentData"; note allstudents are now students
+import { riskConfig, type Student, type RiskLevel } from "../data/studentData";
+import {
+  fetchStudentOverview,
+  type StudentOverview,
+} from "../api/students";
 import { Users, UserCheck, UserX, Search, Mail, Filter } from "lucide-react";
 import { useTheme } from "../context/ThemeContext";
 
@@ -10,10 +16,41 @@ const subjects = ["All Subjects", "BSYS301", "BSYS201", "BSYS401", "INFO101"];
 
 export default function StudentsPage() {
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
+
+  // added for integration
+  const [students, setStudents] = useState<StudentOverview[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
   const [searchQuery, setSearchQuery] = useState("");
   const [riskFilter, setRiskFilter] = useState("All");
   const [subjectFilter, setSubjectFilter] = useState("All Subjects");
   const [activeTab, setActiveTab] = useState<"all" | RiskLevel>("all");
+  
+  
+  //loads all students to the page
+  useEffect(() => {
+  async function loadStudents() {
+    try {
+      setIsLoading(true);
+
+      const data = await fetchStudentOverview();
+
+      setStudents(data);
+      setError(null);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to load students."
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  loadStudents();
+}, []);
 
   const handleSendAlert = (student: Student) => {
     setSelectedStudent(null);
@@ -24,9 +61,9 @@ export default function StudentsPage() {
   };
 
   const riskCounts = {
-    HIGH: allStudents.filter(s => s.risk === "HIGH").length,
-    MEDIUM: allStudents.filter(s => s.risk === "MEDIUM").length,
-    LOW: allStudents.filter(s => s.risk === "LOW").length,
+    HIGH: students.filter(s => s.risk === "HIGH").length,
+    MEDIUM: students.filter(s => s.risk === "MEDIUM").length,
+    LOW: students.filter(s => s.risk === "LOW").length,
   };
 
   const effectiveRiskFilter = activeTab === "all" ? riskFilter : activeTab;
@@ -35,6 +72,16 @@ export default function StudentsPage() {
   const textPrimary = isDark ? "#F1F5F9" : "#1A1A2E";
   const textSecondary = isDark ? "#94A3B8" : "#6B7280";
   const textMuted = isDark ? "#64748B" : "#9CA3AF";
+  
+  //exception handling
+  if (isLoading) {
+  return <div>Loading students...</div>;
+}
+
+if (error) {
+  return <div>Unable to load students: {error}</div>;
+}
+
 
   return (
     <div style={{ animation: "fadeInUp 0.25s ease" }}>
@@ -49,7 +96,7 @@ export default function StudentsPage() {
               </h1>
             </div>
             <p style={{ color: textSecondary, fontSize: "13px", margin: 0 }}>
-              Semester 1 2025 · {allStudents.length} enrolled students across 4 subjects
+              Semester 1 2025 · {students.length} enrolled students across 4 subjects
             </p>
           </div>
           <button onClick={() => toast.info("Bulk email drafted for all high-risk students", { duration: 3000 })}
@@ -65,7 +112,7 @@ export default function StudentsPage() {
       {/* Summary cards */}
       <div style={{ display: "flex", gap: "14px", marginBottom: "18px" }}>
         {[
-          { label: "Total Students", value: allStudents.length, icon: <Users size={18} color="#185FA5" />, bg: "#EBF4FF", color: "#185FA5", accentColor: "#185FA5" },
+          { label: "Total Students", value: students.length, icon: <Users size={18} color="#185FA5" />, bg: "#EBF4FF", color: "#185FA5", accentColor: "#185FA5" },
           { label: "High Risk", value: riskCounts.HIGH, icon: <UserX size={18} color="#E24B4A" />, bg: "#FEE2E2", color: "#E24B4A", accentColor: "#E24B4A" },
           { label: "At Risk (Medium)", value: riskCounts.MEDIUM, icon: <UserCheck size={18} color="#D97706" />, bg: "#FEF3C7", color: "#D97706", accentColor: "#EF9F27" },
           { label: "Safe (Low Risk)", value: riskCounts.LOW, icon: <UserCheck size={18} color="#16A34A" />, bg: "#ECFDF5", color: "#16A34A", accentColor: "#97C459" },
@@ -89,7 +136,7 @@ export default function StudentsPage() {
       {/* Risk filter tabs */}
       <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "16px", background: "#FFFFFF", padding: "6px", borderRadius: "12px", boxShadow: "0 1px 4px rgba(0,0,0,0.07)", width: "fit-content" }}>
         {([
-          { id: "all", label: "All Students", count: allStudents.length, color: "#185FA5", bg: "#EBF4FF" },
+          { id: "all", label: "All Students", count: students.length, color: "#185FA5", bg: "#EBF4FF" },
           { id: "HIGH", label: "High Risk", count: riskCounts.HIGH, color: riskConfig.HIGH.color, bg: riskConfig.HIGH.bg },
           { id: "MEDIUM", label: "At Risk", count: riskCounts.MEDIUM, color: riskConfig.MEDIUM.color, bg: riskConfig.MEDIUM.bg },
           { id: "LOW", label: "Safe", count: riskCounts.LOW, color: riskConfig.LOW.color, bg: riskConfig.LOW.bg },
@@ -128,15 +175,16 @@ export default function StudentsPage() {
           </select>
         </div>
         <span style={{ color: textMuted, fontSize: "12px" }}>
-          {activeTab === "all" ? allStudents.length : allStudents.filter(s => s.risk === activeTab).length} results
+          {activeTab === "all" ? students.length : students.filter(s => s.risk === activeTab).length} results
         </span>
       </div>
 
       <StudentTable
+        students={students} //added students prop to StudentTable to pass the students data from StudentsPage
         searchQuery={searchQuery}
         riskFilter={activeTab === "all" ? riskFilter : activeTab}
         subjectFilter={subjectFilter === "All Subjects" ? "All" : subjectFilter}
-        onViewStudent={setSelectedStudent}
+       // onViewStudent={setSelectedStudent}
       />
       <div style={{ height: "32px" }} />
       <StudentDetailModal student={selectedStudent} onClose={() => setSelectedStudent(null)} onSendAlert={handleSendAlert} />

@@ -33,13 +33,14 @@ type SortDir = "asc" | "desc";
 const PAGE_SIZE = 8;
 
 interface StudentTableProps {
-  students: StudentOverview[]; //added student array prop to StudentTableProps to pass the students data from StudentsPage
+  students?: StudentOverview[]; //added student array prop to StudentTableProps to pass the students data from StudentsPage
   searchQuery: string;
   riskFilter: string;
   subjectFilter?: string;
+  onViewStudent: (studentId: number) => void;
 }
 
-export function StudentTable({ students, searchQuery, riskFilter, subjectFilter }: StudentTableProps) {  //added student array prop to StudentTableProps to pass the students data from StudentsPage
+export function StudentTable({ students = [], searchQuery, riskFilter, subjectFilter, onViewStudent }: StudentTableProps) {  //added student array prop to StudentTableProps to pass the students data from StudentsPage
   const [sortKey, setSortKey] = useState<SortKey>("attendance");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [page, setPage] = useState(1);
@@ -55,7 +56,7 @@ export function StudentTable({ students, searchQuery, riskFilter, subjectFilter 
   };
 
   const filtered = useMemo(() => {
-    let list = [...students];//changed from allStudents to students to use the data fetched from the API 
+    let list = [...(students ?? [])];//changed from allStudents to students to use the data fetched from the API 
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       list = list.filter(
@@ -304,16 +305,14 @@ export function StudentTable({ students, searchQuery, riskFilter, subjectFilter 
                     {/* Action */}
                     <td style={{ padding: "12px 16px", borderBottom: "1px solid #F3F4F6" }}>
                       <button
-                        disabled
-                        title="View student details (coming soon)"
-                        // onClick={() => onViewStudent(student)}
-                        //style={{ display: "flex", alignItems: "center", gap: "5px", padding: "5px 12px", background: "transparent", border: "1.5px solid #E5E7EB", borderRadius: "7px", cursor: "pointer", color: "#185FA5", fontSize: "12px", fontWeight: "600", whiteSpace: "nowrap", transition: "all 0.15s" }}
-                        style={{display: "flex", alignItems: "center", gap: "5px", padding: "5px 12px", background: "#F3F4F6", border: "1.5px solid #E5E7EB", borderRadius: "7px", cursor: "not-allowed", color: "#9CA3AF", fontSize: "12px", fontWeight: "600", whiteSpace: "nowrap",}}
+                        onClick={() => onViewStudent(student.id)}
+                        style={{ display: "flex", alignItems: "center", gap: "5px", padding: "5px 12px", background: "transparent", border: "1.5px solid #E5E7EB", borderRadius: "7px", cursor: "pointer", color: "#185FA5", fontSize: "12px", fontWeight: "600", whiteSpace: "nowrap", transition: "all 0.15s" }}
+                        //style={{display: "flex", alignItems: "center", gap: "5px", padding: "5px 12px", background: "#F3F4F6", border: "1.5px solid #E5E7EB", borderRadius: "7px", cursor: "not-allowed", color: "#9CA3AF", fontSize: "12px", fontWeight: "600", whiteSpace: "nowrap",}}
                         onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.borderColor = "#185FA5"; (e.currentTarget as HTMLButtonElement).style.background = "#EBF4FF"; }}
-                        onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.borderColor = "#E5E7EB"; (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}
+                       // onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.borderColor = "#E5E7EB"; (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}
                       >
-                        {/* <ExternalLink size={11} color="#185FA5" /> just disabled for now */}
-                        <ExternalLink size={11} color="#9CA3AF" />
+                        <ExternalLink size={11} color="#185FA5" />
+                        
                         View
                       </button>
                     </td>

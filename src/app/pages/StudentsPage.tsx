@@ -7,7 +7,9 @@ import { StudentTable } from "../components/StudentTable";
 import { riskConfig, type Student, type RiskLevel } from "../data/studentData";
 import {
   fetchStudentOverview,
+  fetchStudentDetails,
   type StudentOverview,
+  type StudentDetails,
 } from "../api/students";
 import { Users, UserCheck, UserX, Search, Mail, Filter } from "lucide-react";
 import { useTheme } from "../context/ThemeContext";
@@ -15,10 +17,12 @@ import { useTheme } from "../context/ThemeContext";
 const subjects = ["All Subjects", "BSYS301", "BSYS201", "BSYS401", "INFO101"];
 
 export default function StudentsPage() {
-  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
+  const [selectedStudent, setSelectedStudent] = useState<StudentDetails  | null>(null);// changed for integration with backend to use StudentDetails type instead of Student
+  const [loadingStudent, setLoadingStudent] = useState(false); //added for loading state when fetching student details
 
   // added for integration
   const [students, setStudents] = useState<StudentOverview[]>([]);
+  console.log("StudentTable props:", students);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -51,6 +55,24 @@ export default function StudentsPage() {
 
   loadStudents();
 }, []);
+
+const handleViewStudent = async (studentId: number) => {
+  try {
+    setLoadingStudent(true);
+
+    const student = await fetchStudentDetails(studentId);
+
+    console.log(student);
+
+    setSelectedStudent(student);
+
+  } catch (error) {
+    console.error(error);
+    toast.error("Unable to load student details.");
+  } finally {
+    setLoadingStudent(false);
+  }
+};
 
   const handleSendAlert = (student: Student) => {
     setSelectedStudent(null);
@@ -184,6 +206,7 @@ if (error) {
         searchQuery={searchQuery}
         riskFilter={activeTab === "all" ? riskFilter : activeTab}
         subjectFilter={subjectFilter === "All Subjects" ? "All" : subjectFilter}
+        onViewStudent={handleViewStudent}
        // onViewStudent={setSelectedStudent}
       />
       <div style={{ height: "32px" }} />

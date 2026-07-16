@@ -10,6 +10,11 @@ year + teaching_period identify WHICH offering this is. unit_code alone
 is no longer unique, since the same subject is taught every semester —
 uniqueness is now enforced on the (unit_code, year, teaching_period)
 combination instead.
+
+level ("bachelor"/"master") is informational only, not enforced at the
+database level - real enrolment can have messy edge cases (bridging
+students, dual-pathway students) that a hard constraint would wrongly
+block. Useful for reporting and the ML pipeline, not a hard rule.
 """
 
 from sqlalchemy import Column, Integer, String, Date, Boolean, ForeignKey, UniqueConstraint
@@ -28,28 +33,21 @@ class Unit(Base):
     )
 
     id = Column(Integer, primary_key=True, index=True)
-    unit_code = Column(String, nullable=False)  # no longer unique alone
+    unit_code = Column(String, nullable=False)
     unit_name = Column(String, nullable=False)
 
-    # Identifies which offering this Unit row represents.
-    # Nullable for now: existing rows predate this concept and have no
-    # known value. New units should always set both going forward —
-    # enforced at the service/API layer, not the DB, to avoid breaking
-    # existing data on migration.
     year = Column(Integer, nullable=True)
-    teaching_period = Column(String, nullable=True)  # e.g. "S1", "S2", "Summer"
+    teaching_period = Column(String, nullable=True)
 
-    # Semester/teaching period start — used later to calculate
-    # "Week N" from AssessmentEvent.date (e.g. Week 8 checkpoint)
+    # Informational only - see docstring above. Plain string, not an
+    # Enum, since it's not enforced and keeping it simple avoids a
+    # migration later if a third level (e.g. "diploma") ever appears.
+    level = Column(String, nullable=True)
+
     start_date = Column(Date, nullable=True)
 
-    # Nullable: a unit can exist with no lecturer assigned yet, or be
-    # left unassigned after its lecturer's account is deleted.
     lecturer_id = Column(Integer, ForeignKey("users.id"), nullable=True)
 
-    # Archive flag — set to False instead of deleting when the unit has
-    # real academic data attached. NOT NULL on purpose: "is this unit
-    # active" should never be allowed to sit ambiguous.
     is_active = Column(Boolean, nullable=False, default=True, server_default=true())
     status = Column(String, nullable=False, default="UNASSIGNED")
 
@@ -59,4 +57,3 @@ class Unit(Base):
     rule_versions = relationship("RuleVersion", back_populates="unit")
     assessment_events = relationship("AssessmentEvent", back_populates="unit")
     risk_scores = relationship("RiskScore", back_populates="unit")
-    ingestion_batches = relationship("IngestionBatch", back_populates="unit")

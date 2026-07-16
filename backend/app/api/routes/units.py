@@ -81,6 +81,7 @@ def create_unit(payload: UnitCreate, db: Session = Depends(get_db)):
         start_date=payload.start_date,
         year=payload.year,
         teaching_period=payload.teaching_period,
+        level=payload.level,
     )
 
     if payload.lecturer_id is not None:
@@ -113,7 +114,7 @@ def get_unit(unit_id: int, db: Session = Depends(get_db)):
 
 
 # -------------------------
-# UPDATE UNIT (unit_name / start_date only)
+# UPDATE UNIT (unit_name / start_date / level)
 # -------------------------
 @router.patch("/{unit_id}", response_model=UnitOut)
 def update_unit(unit_id: int, payload: UnitUpdate, db: Session = Depends(get_db)):

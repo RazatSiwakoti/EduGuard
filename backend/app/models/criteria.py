@@ -1,18 +1,17 @@
 """
-Criteria model — a lecturer-defined assessable component for a Unit
-(e.g. "Quiz 1", "Attendance"), with a weight and risk threshold.
+Criteria model — a lecturer-defined assessable component for a Unit (e.g. "Quiz 1", "Attendance"), with a weight and risk threshold.
 
-max_score defines the maximum possible value for this criterion (e.g.
-20 for a quiz out of 20, 100 for attendance as a percentage). This is
-required for ingestion to validate incoming scores are actually in range
-(a score can never exceed what the criterion is out of) - threshold is
-a risk cutoff for later analysis, not a validation bound, so it can't
-serve this purpose on its own.
+category identifies what this Criteria structurally IS (Attendance, Weekly Tut, Assessment, or Moodle) - separate from `name`, which stays
+free text for display purposes. sequence_number only applies to ASSESSMENT (which slot: 1-4) - null for the other 3 categories, since
+those are singular per unit.
+
+max_score defines the maximum possible value for this criterion (e.g. 20 for a quiz out of 20, 100 for attendance as a percentage).
 """
 
-from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey
+from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey, Enum
 from sqlalchemy.orm import relationship
 from app.models.base import Base
+from app.models.enums import CriteriaCategory
 
 
 class Criteria(Base):
@@ -25,10 +24,19 @@ class Criteria(Base):
     name = Column(String, nullable=False)
     weight = Column(Float, nullable=False)
     threshold = Column(Float, nullable=False)
-
-    # Maximum possible value for this criterion - required so ingestion
-    # can reject an out-of-range score (e.g. attendance > 100%).
     max_score = Column(Float, nullable=False, default=100.0)
+
+    # Nullable for now - your 2 existing test rows predate this concept.
+    # New Criteria should always set this going forward.
+    category = Column(
+        Enum(
+            CriteriaCategory,
+            name="criteriacategory",
+            values_callable=lambda enum_cls: [member.value for member in enum_cls],
+        ),
+        nullable=True,
+    )
+    sequence_number = Column(Integer, nullable=True)  # only meaningful for ASSESSMENT
 
     enabled = Column(Boolean, default=True)
 

@@ -15,20 +15,16 @@ class UnitCreate(BaseModel):
     unit_code: str = Field(..., min_length=1, max_length=50)
     unit_name: str = Field(..., min_length=1, max_length=255)
     start_date: Optional[date] = None
-    # Optional at creation time - a unit can be created unassigned and have
-    # a lecturer attached later via the dedicated assign endpoint.
+    year: int = Field(..., ge=2000, le=2100)
+    teaching_period: str = Field(..., min_length=1, max_length=20)
+    level: Optional[str] = Field(None, max_length=20)  # "bachelor" / "master"
     lecturer_id: Optional[int] = None
 
 
 class UnitUpdate(BaseModel):
-    """
-    Partial update. unit_code is treated as a stable identifier once
-    created, so it isn't editable here, and lecturer assignment has its
-    own dedicated endpoint (UnitAssignLecturer) rather than being folded
-    into a general-purpose update.
-    """
     unit_name: Optional[str] = Field(None, min_length=1, max_length=255)
     start_date: Optional[date] = None
+    level: Optional[str] = Field(None, max_length=20)
 
 
 class UnitAssignLecturer(BaseModel):
@@ -42,9 +38,10 @@ class UnitOut(BaseModel):
     unit_code: str
     unit_name: str
     start_date: Optional[date] = None
+    year: Optional[int] = None
+    teaching_period: Optional[str] = None
+    level: Optional[str] = None
     lecturer_id: Optional[int] = None
     status: str
     is_active: bool
-    # Full lecturer details when assigned, None when not - lets the
-    # frontend show a name directly instead of just an id.
     lecturer: Optional[UserOut] = None

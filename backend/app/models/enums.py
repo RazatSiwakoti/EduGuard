@@ -14,3 +14,15 @@ class EventSource(str, Enum):
     """
     BULK_UPLOAD = "bulk_upload"
     MANUAL = "manual"
+
+
+class CriteriaCategory(str, Enum):
+    """
+    What a Criteria structurally IS, not just its display name - lets
+    the risk engine reliably find "the Attendance one" or "assessment
+    slot 2" without guessing from free-text names.
+    """
+    ATTENDANCE = "attendance"
+    WEEKLY_TUT = "weekly_tut"
+    ASSESSMENT = "assessment"
+    MOODLE = "moodle"

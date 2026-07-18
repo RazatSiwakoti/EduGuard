@@ -1,10 +1,8 @@
 """
 EduGuard FastAPI Application Entry Point.
 
-Table creation is now handled entirely by Alembic migrations —
-create_all() and the model imports it required have been removed
-from here on purpose, so there's exactly one source of truth for
-schema changes (alembic/versions/), not two.
+Table creation is now handled entirely by Alembic migrations — create_all() and the model imports it required have been removed
+from here on purpose, so there's exactly one source of truth for schema changes (alembic/versions/), not two.
 """
 
 from fastapi import Depends, FastAPI

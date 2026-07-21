@@ -210,7 +210,7 @@ if (error) {
        // onViewStudent={setSelectedStudent}
       />
       <div style={{ height: "32px" }} />
-      <StudentDetailModal student={selectedStudent} onClose={() => setSelectedStudent(null)} onSendAlert={handleSendAlert} />
+      <StudentDetailModal student={selectedStudent} onClose={() => setSelectedStudent(null)} />
     </div>
   );
 }

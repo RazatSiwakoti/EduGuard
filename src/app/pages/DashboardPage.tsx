@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { FilterBar } from "../components/FilterBar";
 import { MetricCards } from "../components/MetricCards";
@@ -8,24 +8,77 @@ import { AlertsPanel } from "../components/AlertsPanel";
 import { ActivityFeed } from "../components/ActivityFeed";
 import { StudentDetailModal } from "../components/StudentDetailModal";
 import { RiskTrendChart } from "../components/RiskTrendChart";
-import { type Student } from "../data/studentData";
 import { Cpu, RefreshCw, Calendar } from "lucide-react";
 import { useTheme } from "../context/ThemeContext";
+import {fetchStudentOverview, fetchStudentDetails, type StudentOverview, type StudentDetails} from "../api/students";
 
 export default function DashboardPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [riskFilter, setRiskFilter] = useState("All");
   const [termFilter, setTermFilter] = useState("Semester 1 2026");
   const [subjectGroupCode, setSubjectGroupCode] = useState("All Classes");
-  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
+  const [selectedStudent, setSelectedStudent] = useState<StudentDetails | null>(null);
   const [isAnalysing, setIsAnalysing] = useState(false);
   const [currentWeek, setCurrentWeek] = useState(8);
+  const [students, setStudents] = useState<StudentOverview[]>([]);
 
+const [isLoading, setIsLoading] = useState(true);
+
+const [error, setError] =
+useState<string | null>(null);
   const handleImport = () => {
     toast.success("Moodle sync complete", {
       description: "248 student records imported and risk scores updated.",
       duration: 4000,
     });
+  };
+
+   //loads all students to the page
+useEffect(() => {
+    async function loadStudents() {
+        try {
+            setIsLoading(true);
+
+            const data =
+                await fetchStudentOverview();
+
+            setStudents(data);
+            setError(null);
+
+        } catch (err) {
+            setError(
+                err instanceof Error
+                ? err.message
+                : "Failed to load students."
+            );
+
+        } finally {
+            setIsLoading(false);
+        }
+    }
+
+    loadStudents();
+}, []);
+
+  // Function to handle viewing student details
+  const [loadingStudent, setLoadingStudent] = useState(false); //added for loading state when fetching student details
+
+  const handleViewStudent = async (studentId: number) => {
+    try {
+      setLoadingStudent(true);
+  
+      const student = await fetchStudentDetails(studentId);
+  
+      console.log(student);
+  
+      setSelectedStudent(student);
+  
+    } catch (error) {
+      console.error(error);
+      toast.error("Unable to load student details.");
+    } finally {
+      setLoadingStudent(false);
+    }
   };
 
   const handleRunAnalysis = async () => {
@@ -41,13 +94,13 @@ export default function DashboardPage() {
     });
   };
 
-  const handleSendAlert = (student: Student) => {
-    setSelectedStudent(null);
-    toast.success("SMTP Alert Dispatched", {
-      description: `Email sent to ${student.email} via EdGuard notification system.`,
-      duration: 4000,
-    });
-  };
+  // // const handleSendAlert = (student: Student) => {
+  // //   setSelectedStudent(null);
+  // //   toast.success("SMTP Alert Dispatched", {
+  // //     description: `Email sent to ${student.email} via EdGuard notification system.`,
+  // //     duration: 4000,
+  // //   });
+  // };
 
   const handleViewAllAlerts = () => {
     toast.info("Opening Alerts Management", { description: "Navigate to Alerts in the sidebar.", duration: 3000 });
@@ -64,15 +117,7 @@ export default function DashboardPage() {
       <div style={{ marginBottom: "22px" }}>
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
           <div>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: 6 }}>
-              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: "#185FA5", letterSpacing: "0.2em", fontWeight: 600 }}>
-                ◆ FACULTY CONSOLE — VOL. I
-              </span>
-              <div style={{ width: 28, height: 1, background: "rgba(24,95,165,0.3)" }} />
-              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: textMono, letterSpacing: "0.14em" }}>
-                TERM 01 · 2026
-              </span>
-            </div>
+            
             <div style={{ display: "flex", alignItems: "baseline", gap: "12px", marginBottom: "6px" }}>
               <h1 style={{
                 color: textPrimary,
@@ -86,7 +131,7 @@ export default function DashboardPage() {
               </h1>
             </div>
             <p style={{ color: textSecondary, fontSize: "13px", margin: 0, fontFamily: "'Instrument Serif', serif", fontStyle: "italic", letterSpacing: "0.005em" }}>
-              {termFilter} · Week {currentWeek} checkpoint · last synced 10 minutes ago
+              {termFilter} · Week {currentWeek}
             </p>
           </div>
 
@@ -94,7 +139,7 @@ export default function DashboardPage() {
             {/* ML status */}
             <div style={{ display: "flex", alignItems: "center", gap: "6px", background: "#F0FDF4", padding: "7px 12px", borderRadius: "8px", border: "1px solid #BBF7D0" }}>
               <span style={{ width: "7px", height: "7px", background: "#22C55E", borderRadius: "50%", animation: "pulse 2s infinite" }} />
-              <span style={{ color: "#16A34A", fontSize: "11px", fontWeight: "700" }}>Hybrid ML Active</span>
+              <span style={{ color: "#16A34A", fontSize: "11px", fontWeight: "700" }}>Hybrid ML</span>
             </div>
 
             {/* Run analysis button */}
@@ -144,7 +189,7 @@ export default function DashboardPage() {
 
       {/* Main 2-column layout */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 0.58fr", gap: "18px", alignItems: "start" }}>
-        <StudentTable searchQuery={searchQuery} riskFilter={riskFilter} onViewStudent={setSelectedStudent} />
+        <StudentTable students={students} searchQuery={searchQuery} riskFilter={riskFilter} onViewStudent={handleViewStudent} />
         <div style={{ display: "flex", flexDirection: "column", gap: "18px" }}>
           <RiskDonutChart />
           <AlertsPanel onViewAll={handleViewAllAlerts} />
@@ -154,7 +199,7 @@ export default function DashboardPage() {
 
       <div style={{ height: "32px" }} />
 
-      <StudentDetailModal student={selectedStudent} onClose={() => setSelectedStudent(null)} onSendAlert={handleSendAlert} />
+      <StudentDetailModal student={selectedStudent} onClose={() => setSelectedStudent(null)} />
     </div>
   );
 }

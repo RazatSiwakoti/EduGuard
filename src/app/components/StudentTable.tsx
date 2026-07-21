@@ -106,7 +106,7 @@ export function StudentTable({ students = [], searchQuery, riskFilter, subjectFi
 
   return sortDir === "asc" ? av - bv : bv - av;
 });return list;
-  }, [searchQuery, riskFilter, subjectFilter, sortKey, sortDir]);
+  }, [students, searchQuery, riskFilter, subjectFilter, sortKey, sortDir]);
 
   const handleExportCSV = () => {
     const headers = ["Name", "Student ID", "Subject",  "Attendance %", "GPA", "Risk", "Trend", "ML Score", "Confidence"]; //removed Program header as it is no longer needed so is assignments is is work in progress

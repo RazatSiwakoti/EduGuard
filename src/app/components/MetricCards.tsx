@@ -1,5 +1,6 @@
 import { Users, AlertTriangle, Bell, Brain, TrendingUp, TrendingDown } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import {fetchDashboardSummary, type DashboardSummary,} from "../api/dashboard";
 
 interface MetricCardProps {
   icon: React.ReactNode;
@@ -158,12 +159,39 @@ function MetricCard(props: MetricCardProps) {
 }
 
 export function MetricCards() {
+  const [summary, setSummary] = useState<DashboardSummary | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+ useEffect(() => {
+  async function loadSummary() {
+    try {
+      setIsLoading(true);
+
+      const data = await fetchDashboardSummary();
+
+      setSummary(data);
+      setError(null);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to load dashboard summary."
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  loadSummary();
+ }, []);
+
   const cards: MetricCardProps[] = [
     {
       icon: <Users size={16} color="#185FA5" strokeWidth={2} />,
       kicker: "01 / COHORT",
       title: "Total Students",
-      value: "248",
+      value: summary?.total_students.toString() ?? "0",
       subtitle: "enrolled this term",
       valueColor: "#0F172A",
       iconBg: "#EBF4FF", iconBorder: "rgba(24,95,165,0.18)",
@@ -176,7 +204,7 @@ export function MetricCards() {
       icon: <AlertTriangle size={16} color="#DC2626" strokeWidth={2} />,
       kicker: "02 / RISK",
       title: "At-Risk Students",
-      value: "89",
+      value: summary?.at_risk_students.toString() ?? "0",
       subtitle: "require intervention",
       valueColor: "#B91C1C",
       iconBg: "#FEF2F2", iconBorder: "rgba(220,38,38,0.18)",
@@ -189,7 +217,7 @@ export function MetricCards() {
       icon: <Bell size={16} color="#B45309" strokeWidth={2} />,
       kicker: "03 / SMTP",
       title: "Alerts Dispatched",
-      value: "34",
+      value: summary?.alerts_dispatched.toString() ?? "0",
       subtitle: "sent this week",
       valueColor: "#B45309",
       iconBg: "#FFFBEB", iconBorder: "rgba(180,83,9,0.18)",
@@ -202,7 +230,7 @@ export function MetricCards() {
       icon: <Brain size={16} color="#047857" strokeWidth={2} />,
       kicker: "04 / ML MODEL",
       title: "Model Accuracy",
-      value: "74",
+      value: summary?.model_accuracy?.toString() ?? "0",
       unit: "%",
       subtitle: "F1 · SHAP verified",
       valueColor: "#047857",
@@ -213,6 +241,14 @@ export function MetricCards() {
       delay: 240,
     },
   ];
+  
+  if (isLoading) {
+  return <div>Loading dashboard metrics...</div>;
+ }
+
+ if (error) {
+  return <div>Unable to load dashboard metrics: {error}</div>;
+ }
 
   return (
     <div style={{ display: "flex", gap: "16px" }}>

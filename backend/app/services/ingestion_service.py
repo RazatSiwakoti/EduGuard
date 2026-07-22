@@ -16,6 +16,14 @@ Core invariants enforced here:
   mismatch is reported as a warning only.
 - Disabled Criteria still accept and store data - "enabled" is an
   analysis-time filter for Phase 5, not an ingestion-time gate.
+- Weekly Attendance/Tutorial cells are aggregated into ONE percentage
+  AND one trend value before storage - raw weekly values are never
+  persisted separately. The trend value mirrors the ML training
+  notebook's formula exactly, since the ML model needs it as a feature
+  and there would otherwise be nowhere to reconstruct it from later.
+  A blank/unrecognised weekly cell counts as absent/not_submitted (0
+  credit for that week), consistent with the project-wide rule that
+  unsubmitted work is always a real 0, never silently skipped.
 """
 
 from typing import Optional
@@ -26,7 +34,14 @@ from app.models.enrollment import Enrollment
 from app.models.criteria import Criteria
 from app.models.assessment_event import AssessmentEvent
 from app.models.ingestion_batch import IngestionBatch
-from app.models.enums import EventSource
+from app.models.enums import EventSource, CriteriaCategory
+
+from app.services.rule_engine import (
+    calculate_attendance_pct,
+    calculate_attendance_trend,
+    calculate_tutorial_completion_pct,
+    calculate_tutorial_completion_trend,
+)
 
 
 def resolve_or_create_student(
@@ -116,17 +131,88 @@ def validate_score(criteria: Criteria, score: float) -> Optional[str]:
 def build_assessment_event(
     student: Student, unit_id: int, criteria: Criteria, score: float,
     source: EventSource, created_by: int, batch_id: Optional[int] = None,
+    trend_value: Optional[float] = None,
 ) -> AssessmentEvent:
     """Stages one immutable raw data point. Never call this to 'fix' an
-    existing row - always creates a new one."""
+    existing row - always creates a new one. trend_value is only ever
+    set for Attendance/Weekly Tut events; None for everything else."""
     return AssessmentEvent(
         student_id=student.id,
         unit_id=unit_id,
         criteria_id=criteria.id,
         score=score,
+        trend_value=trend_value,
         source=source,
         created_by=created_by,
         batch_id=batch_id,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Weekly cell parsing (Attendance / Weekly Tut only)
+# ---------------------------------------------------------------------------
+
+def parse_attendance_cell(raw_value) -> bool:
+    """
+    Normalises one week's raw attendance cell into True (attended) or
+    False (absent). A blank/unrecognised cell is treated as absent,
+    consistent with the project-wide rule: unmarked = 0, never silently
+    excluded (structural absence is handled at the Criteria level, not
+    per-cell).
+    """
+    if raw_value is None:
+        return False
+    text = str(raw_value).strip().lower()
+    return text in ("1", "true", "yes", "y", "present")
+
+
+def parse_tutorial_cell(raw_value) -> str:
+    """
+    Normalises one week's raw tutorial cell into a status string matching
+    TUTORIAL_STATUS_CREDIT's keys. A blank/unrecognised cell is treated
+    as not_submitted (0 credit) - same reasoning as parse_attendance_cell.
+    """
+    if raw_value is None:
+        return "not_submitted"
+    text = str(raw_value).strip().lower()
+    if text in ("submitted", "yes", "y", "1"):
+        return "submitted"
+    if text == "late":
+        return "late"
+    return "not_submitted"
+
+
+def build_weekly_criterion_event(
+    student: Student, unit_id: int, criteria: Criteria,
+    weekly_raw_values: list, source: EventSource, created_by: int,
+    batch_id: Optional[int] = None,
+) -> AssessmentEvent:
+    """
+    Aggregates a student's raw weekly cells (Attendance or Weekly Tut)
+    into ONE completion percentage AND one trend value, using the exact
+    same functions the rule engine and ML training notebook use, then
+    stages both on one AssessmentEvent row. Raw weekly values are NOT
+    persisted separately - only score and trend_value.
+
+    Expects weekly_raw_values in strict week order:
+    - Attendance: exactly 7 values (weeks 1-7)
+    - Weekly Tut: exactly 6 values (weeks 2-7)
+    """
+    if criteria.category == CriteriaCategory.ATTENDANCE:
+        weekly_bools = [parse_attendance_cell(v) for v in weekly_raw_values]
+        score = calculate_attendance_pct(weekly_bools)
+        trend = calculate_attendance_trend(weekly_bools)
+    elif criteria.category == CriteriaCategory.WEEKLY_TUT:
+        weekly_statuses = [parse_tutorial_cell(v) for v in weekly_raw_values]
+        score = calculate_tutorial_completion_pct(weekly_statuses)
+        trend = calculate_tutorial_completion_trend(weekly_statuses)
+    else:
+        raise ValueError(
+            f"build_weekly_criterion_event called with unsupported category: {criteria.category}"
+        )
+
+    return build_assessment_event(
+        student, unit_id, criteria, score, source, created_by, batch_id, trend_value=trend
     )
 
 
@@ -135,18 +221,25 @@ def process_bulk_upload(
     student_number_col: str, name_col: str,
     email_col: Optional[str], program_col: Optional[str],
     criteria_column_map: dict[int, str],
+    weekly_criteria_column_map: Optional[dict[int, list[str]]] = None,
 ) -> tuple[IngestionBatch, list[dict], list[dict]]:
     """
     rows: one dict per CSV/Excel row, keyed by the file's original column
     headers (e.g. {"StudentID": "S1001", "Quiz1": "18", ...}).
-    criteria_column_map: {criteria_id: column_name}.
+    criteria_column_map: {criteria_id: column_name} - for criteria that
+        are already a single value per student (Assessment, Moodle).
+    weekly_criteria_column_map: {criteria_id: [column_name, ...]} - for
+        Attendance/Weekly Tut, where the file has one raw column per week.
 
     Validation is per-cell, not per-row: if a row has 3 criteria columns
     and only 1 is invalid, the other 2 are still stored - "accept valid
     rows, report invalid ones" is applied at the finest useful grain
     rather than discarding a whole row over one bad cell.
     """
-    criteria_lookup = get_unit_criteria_map(db, unit_id, criteria_column_map.keys())
+    weekly_criteria_column_map = weekly_criteria_column_map or {}
+
+    all_criteria_ids = list(criteria_column_map.keys()) + list(weekly_criteria_column_map.keys())
+    criteria_lookup = get_unit_criteria_map(db, unit_id, all_criteria_ids)
 
     batch = IngestionBatch(
         unit_id=unit_id, lecturer_id=lecturer_id, filename=filename, total_rows=len(rows)
@@ -179,6 +272,7 @@ def process_bulk_upload(
 
         resolve_or_create_enrollment(db, student.id, unit_id)
 
+        # --- Single-value criteria: Assessment, Moodle ---
         for criteria_id, column_name in criteria_column_map.items():
             raw_value = row.get(column_name)
             if raw_value in (None, ""):
@@ -209,6 +303,34 @@ def process_bulk_upload(
             db.add(event)
             success_count += 1
 
+        # --- Weekly criteria: Attendance, Weekly Tut ---
+        for criteria_id, weekly_columns in weekly_criteria_column_map.items():
+            criteria = criteria_lookup[criteria_id]
+            weekly_raw_values = [row.get(col) for col in weekly_columns]
+
+            try:
+                event = build_weekly_criterion_event(
+                    student, unit_id, criteria, weekly_raw_values,
+                    EventSource.BULK_UPLOAD, lecturer_id, batch.id,
+                )
+            except ValueError as e:
+                errors.append({
+                    "row": row_number, "student_number": student_number,
+                    "criteria": criteria.name, "reason": str(e),
+                })
+                continue
+
+            range_error = validate_score(criteria, event.score)
+            if range_error:
+                errors.append({
+                    "row": row_number, "student_number": student_number,
+                    "criteria": criteria.name, "reason": range_error,
+                })
+                continue
+
+            db.add(event)
+            success_count += 1
+
     batch.values_stored = success_count
     batch.values_failed = len(errors)
 
@@ -222,7 +344,11 @@ def process_manual_entry(
 ) -> tuple[list[AssessmentEvent], list[dict], list[dict]]:
     """Same validation path as bulk upload, minus the IngestionBatch -
     there's no file to group a single manual entry under, so batch_id
-    stays None on these events."""
+    stays None on these events. Manual entry is always a single final
+    value per criterion (including Attendance/Tutorial) - a lecturer
+    typing in one number, not raw weekly cells - so trend_value stays
+    None for these events; trend is only ever computed from real weekly
+    bulk-upload data."""
     criteria_lookup = get_unit_criteria_map(db, unit_id, scores.keys())
 
     errors: list[dict] = []

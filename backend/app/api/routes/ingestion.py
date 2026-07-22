@@ -51,12 +51,9 @@ def _require_assigned_lecturer(unit: Unit, current_user: User) -> None:
 
 def _sanitize_cell(value):
     """
-    pandas represents a blank cell as NaN (a real float), and assigning
-    None back into a numeric-dtype column silently reverts to NaN - so
-    df.where(pd.notnull(df), None) alone does NOT reliably clear blanks
-    in numeric columns. pd.isna() catches both NaN and None regardless
-    of dtype, so sanitizing per-cell after to_dict() is the only
-    reliable place to do this.
+    pandas represents a blank cell as NaN (a real float), and assigning none back into a numeric-dtype column silently reverts to NaN - so
+    df.where(pd.notnull(df), None) alone does NOT reliably clear blanks in numeric columns. pd.isna() catches both NaN and None regardless
+    of dtype, so sanitizing per-cell after to_dict() is the only reliable place to do this.
 
     Without this, a blank numeric cell reaches validate_score() as a
     real NaN float - and since every comparison against NaN evaluates

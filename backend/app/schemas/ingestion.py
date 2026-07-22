@@ -18,8 +18,16 @@ class BulkIngestionMapping(BaseModel):
     name_col: str
     email_col: Optional[str] = None
     program_col: Optional[str] = None
-    # criteria_id -> column_name
+
+    # criteria_id -> column_name. Used for criteria that are already a
+    # single value per student (Assessment, Moodle).
     criteria_column_map: dict[int, str]
+
+    # criteria_id -> list of column_names, one per tracked week, in
+    # week order. Used ONLY for Attendance/Weekly Tut, where the raw
+    # file has one column per week rather than one pre-calculated value.
+    # Defaults to empty so existing uploads with no weekly data still work.
+    weekly_criteria_column_map: dict[int, list[str]] = {}
 
 
 class IngestionRowError(BaseModel):

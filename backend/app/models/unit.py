@@ -57,3 +57,4 @@ class Unit(Base):
     rule_versions = relationship("RuleVersion", back_populates="unit")
     assessment_events = relationship("AssessmentEvent", back_populates="unit")
     risk_scores = relationship("RiskScore", back_populates="unit")
+    ingestion_batches = relationship("IngestionBatch", back_populates="unit")

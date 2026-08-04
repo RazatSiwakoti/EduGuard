@@ -17,7 +17,6 @@ batch_id is nullable: bulk-uploaded rows point to the IngestionBatch
 they came from; manually entered single rows have no batch and stay
 NULL - there's no file to group them under.
 """
-
 from sqlalchemy import Column, Integer, Float, DateTime, ForeignKey, Enum
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -37,6 +36,12 @@ class AssessmentEvent(Base):
 
     score = Column(Float, nullable=False)
 
+    # Only populated for ATTENDANCE/WEEKLY_TUT categories - the ML
+    # model's early-vs-late trend feature, computed at ingestion time
+    # (mirrors the exact training notebook formula) since raw weekly
+    # values themselves are never persisted. NULL for Assessment/Moodle.
+    trend_value = Column(Float, nullable=True)
+
     source = Column(
         Enum(
             EventSource,
@@ -46,9 +51,7 @@ class AssessmentEvent(Base):
         nullable=False,
     )
 
-    # Which lecturer submitted this event - audit trail (#3, #11).
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
-
     date = Column(DateTime, server_default=func.now())
 
     student = relationship("Student", back_populates="assessment_events")

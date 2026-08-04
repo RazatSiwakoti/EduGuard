@@ -1,10 +1,8 @@
 """
 EduGuard FastAPI Application Entry Point.
 
-Table creation is now handled entirely by Alembic migrations —
-create_all() and the model imports it required have been removed
-from here on purpose, so there's exactly one source of truth for
-schema changes (alembic/versions/), not two.
+Table creation is now handled entirely by Alembic migrations — create_all() and the model imports it required have been removed
+from here on purpose, so there's exactly one source of truth for schema changes (alembic/versions/), not two.
 """
 
 from fastapi import Depends, FastAPI
@@ -13,13 +11,14 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
-
+from app.api.routes import risk
 from app.api.routes.auth import router as auth_router
 from app.api.routes.super_admin import router as super_admin_router
 from app.api.routes.admin import router as admin_router
 from app.api.routes.units import router as units_router
 from app.api.routes.ingestion import router as ingestion_router
 from app.api.routes.criteria import router as criteria_router
+
 
 
 app = FastAPI(
@@ -34,6 +33,9 @@ app.include_router(admin_router)
 app.include_router(units_router)
 app.include_router(ingestion_router)
 app.include_router(criteria_router)
+app.include_router(risk.router)
+app.include_router(risk.unit_router)
+
 
 @app.get("/")
 def root():

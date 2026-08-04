@@ -11,11 +11,17 @@ before the transaction commits - flush is not a commit, it's safe here.
 Core invariants enforced here:
 - AssessmentEvent is INSERT-only. Nothing in this file ever UPDATEs an
   existing AssessmentEvent row - a correction is just a new row.
-- Student demographic fields (name/email/program) are never overwritten
-  by ingestion, even if the upload disagrees with what's on file - a
-  mismatch is reported as a warning only.
+- Student demographic fields (name/email/program/gender/age) are never
+  overwritten by ingestion, even if the upload disagrees with what's on
+  file - a mismatch is reported as a warning only.
 - Disabled Criteria still accept and store data - "enabled" is an
   analysis-time filter for Phase 5, not an ingestion-time gate.
+- Weekly Attendance/Tutorial cells (from bulk CSV columns OR manual
+  entry's weekly_scores) are aggregated into ONE percentage AND one
+  trend value before storage - raw weekly values are never persisted
+  separately. A blank/unrecognised weekly cell counts as absent/
+  not_submitted (0 credit for that week), consistent with the
+  project-wide rule that unsubmitted work is always a real 0.
 """
 
 from typing import Optional
@@ -26,19 +32,27 @@ from app.models.enrollment import Enrollment
 from app.models.criteria import Criteria
 from app.models.assessment_event import AssessmentEvent
 from app.models.ingestion_batch import IngestionBatch
-from app.models.enums import EventSource
+from app.models.enums import EventSource, CriteriaCategory
+
+from app.services.rule_engine import (
+    calculate_attendance_pct,
+    calculate_attendance_trend,
+    calculate_tutorial_completion_pct,
+    calculate_tutorial_completion_trend,
+)
 
 
 def resolve_or_create_student(
     db: Session, student_number: str, name: Optional[str],
     email: Optional[str] = None, program: Optional[str] = None,
+    gender: Optional[str] = None, age: Optional[int] = None,
 ) -> tuple[Student, Optional[str]]:
     """
     Matches by student_number - the only reliable identifier across
-    uploads. If found, existing name/email/program are NEVER overwritten;
-    a mismatch just produces a warning string for the caller to report.
-    If not found, a new Student is created - name is required in this
-    case since Student.name is NOT NULL at the DB level.
+    uploads. If found, existing name/email/program/gender/age are NEVER
+    overwritten; a mismatch just produces a warning string for the
+    caller to report. If not found, a new Student is created - name is
+    required in this case since Student.name is NOT NULL at the DB level.
     """
     student = db.query(Student).filter(Student.student_number == student_number).first()
 
@@ -50,6 +64,10 @@ def resolve_or_create_student(
             mismatches.append(f"email ('{student.email}' on file vs '{email}' uploaded)")
         if program and student.program and student.program != program:
             mismatches.append(f"program ('{student.program}' on file vs '{program}' uploaded)")
+        if gender and student.gender and student.gender != gender:
+            mismatches.append(f"gender ('{student.gender}' on file vs '{gender}' uploaded)")
+        if age is not None and student.age is not None and student.age != age:
+            mismatches.append(f"age ('{student.age}' on file vs '{age}' uploaded)")
 
         warning = None
         if mismatches:
@@ -62,7 +80,10 @@ def resolve_or_create_student(
     if not name:
         raise ValueError(f"Cannot create new student '{student_number}': name is required")
 
-    student = Student(student_number=student_number, name=name, email=email, program=program)
+    student = Student(
+        student_number=student_number, name=name, email=email,
+        program=program, gender=gender, age=age,
+    )
     db.add(student)
     db.flush()  # need student.id for enrollment/event creation below
     return student, None
@@ -116,18 +137,110 @@ def validate_score(criteria: Criteria, score: float) -> Optional[str]:
 def build_assessment_event(
     student: Student, unit_id: int, criteria: Criteria, score: float,
     source: EventSource, created_by: int, batch_id: Optional[int] = None,
+    trend_value: Optional[float] = None,
 ) -> AssessmentEvent:
     """Stages one immutable raw data point. Never call this to 'fix' an
-    existing row - always creates a new one."""
+    existing row - always creates a new one. trend_value is only ever
+    set for Attendance/Weekly Tut events; None for everything else."""
     return AssessmentEvent(
         student_id=student.id,
         unit_id=unit_id,
         criteria_id=criteria.id,
         score=score,
+        trend_value=trend_value,
         source=source,
         created_by=created_by,
         batch_id=batch_id,
     )
+
+
+# ---------------------------------------------------------------------------
+# Weekly cell parsing (Attendance / Weekly Tut only) - shared by both
+# bulk CSV columns and manual entry's weekly_scores
+# ---------------------------------------------------------------------------
+
+def parse_attendance_cell(raw_value) -> bool:
+    """
+    Normalises one week's raw attendance cell into True (attended) or
+    False (absent). A blank/unrecognised cell is treated as absent,
+    consistent with the project-wide rule: unmarked = 0, never silently
+    excluded (structural absence is handled at the Criteria level, not
+    per-cell).
+    """
+    if raw_value is None:
+        return False
+    text = str(raw_value).strip().lower()
+    return text in ("1", "true", "yes", "y", "present")
+
+
+def parse_tutorial_cell(raw_value) -> str:
+    """
+    Normalises one week's raw tutorial cell into a status string matching
+    TUTORIAL_STATUS_CREDIT's keys. A blank/unrecognised cell is treated
+    as not_submitted (0 credit) - same reasoning as parse_attendance_cell.
+    """
+    if raw_value is None:
+        return "not_submitted"
+    text = str(raw_value).strip().lower()
+    if text in ("submitted", "yes", "y", "1"):
+        return "submitted"
+    if text == "late":
+        return "late"
+    return "not_submitted"
+
+
+def build_weekly_criterion_event(
+    student: Student, unit_id: int, criteria: Criteria,
+    weekly_raw_values: list, source: EventSource, created_by: int,
+    batch_id: Optional[int] = None,
+) -> AssessmentEvent:
+    """
+    Aggregates a student's raw weekly cells (Attendance or Weekly Tut)
+    into ONE completion percentage AND one trend value, using the exact
+    same functions the rule engine and ML training notebook use, then
+    stages both on one AssessmentEvent row. Raw weekly values are NOT
+    persisted separately - only score and trend_value.
+
+    Used identically by bulk upload (values from CSV columns) and
+    manual entry (values typed directly) - same function, same result,
+    regardless of how the raw values arrived.
+
+    Expects weekly_raw_values in strict week order:
+    - Attendance: exactly 7 values (weeks 1-7)
+    - Weekly Tut: exactly 6 values (weeks 2-7)
+    A different length still produces a valid percentage, but trend
+    comes back None rather than erroring (see rule_engine.py's trend
+    functions - they require the exact expected length).
+    """
+    if criteria.category == CriteriaCategory.ATTENDANCE:
+        weekly_bools = [parse_attendance_cell(v) for v in weekly_raw_values]
+        score = calculate_attendance_pct(weekly_bools)
+        trend = calculate_attendance_trend(weekly_bools)
+    elif criteria.category == CriteriaCategory.WEEKLY_TUT:
+        weekly_statuses = [parse_tutorial_cell(v) for v in weekly_raw_values]
+        score = calculate_tutorial_completion_pct(weekly_statuses)
+        trend = calculate_tutorial_completion_trend(weekly_statuses)
+    else:
+        raise ValueError(
+            f"build_weekly_criterion_event called with unsupported category: {criteria.category}"
+        )
+
+    return build_assessment_event(
+        student, unit_id, criteria, score, source, created_by, batch_id, trend_value=trend
+    )
+
+
+def _parse_age(raw_value) -> Optional[int]:
+    """Best-effort int parse for age from a CSV cell (which may arrive
+    as '20', '20.0', or similar). Malformed values are silently ignored
+    (treated as not provided) rather than failing the whole row over a
+    non-critical demographic field."""
+    if raw_value in (None, ""):
+        return None
+    try:
+        return int(float(raw_value))
+    except (TypeError, ValueError):
+        return None
 
 
 def process_bulk_upload(
@@ -135,41 +248,52 @@ def process_bulk_upload(
     student_number_col: str, name_col: str,
     email_col: Optional[str], program_col: Optional[str],
     criteria_column_map: dict[int, str],
-) -> tuple[IngestionBatch, list[dict], list[dict]]:
+    weekly_criteria_column_map: Optional[dict[int, list[str]]] = None,
+    gender_col: Optional[str] = None,
+    age_col: Optional[str] = None,
+) -> tuple[IngestionBatch, list[dict], list[dict], set[int]]:
     """
     rows: one dict per CSV/Excel row, keyed by the file's original column
-    headers (e.g. {"StudentID": "S1001", "Quiz1": "18", ...}).
-    criteria_column_map: {criteria_id: column_name}.
+    headers.
+    criteria_column_map: {criteria_id: column_name} - single-value criteria.
+    weekly_criteria_column_map: {criteria_id: [column_name, ...]} - weekly criteria.
 
-    Validation is per-cell, not per-row: if a row has 3 criteria columns
-    and only 1 is invalid, the other 2 are still stored - "accept valid
-    rows, report invalid ones" is applied at the finest useful grain
-    rather than discarding a whole row over one bad cell.
+    Returns the set of student.id values that had at least one
+    AssessmentEvent successfully created in this batch, so the caller
+    knows which students need re-analysis.
     """
-    criteria_lookup = get_unit_criteria_map(db, unit_id, criteria_column_map.keys())
+    weekly_criteria_column_map = weekly_criteria_column_map or {}
+
+    all_criteria_ids = list(criteria_column_map.keys()) + list(weekly_criteria_column_map.keys())
+    criteria_lookup = get_unit_criteria_map(db, unit_id, all_criteria_ids)
 
     batch = IngestionBatch(
         unit_id=unit_id, lecturer_id=lecturer_id, filename=filename, total_rows=len(rows)
     )
     db.add(batch)
-    db.flush()  # need batch.id to attach to events below
+    db.flush()
 
     errors: list[dict] = []
     warnings: list[dict] = []
     success_count = 0
+    touched_student_ids: set[int] = set()
 
     for row_number, row in enumerate(rows, start=1):
         student_number = row.get(student_number_col)
         name = row.get(name_col)
         email = row.get(email_col) if email_col else None
         program = row.get(program_col) if program_col else None
+        gender = row.get(gender_col) if gender_col else None
+        age = _parse_age(row.get(age_col)) if age_col else None
 
         if not student_number:
             errors.append({"row": row_number, "reason": "Missing student_number - row skipped"})
             continue
 
         try:
-            student, warning = resolve_or_create_student(db, student_number, name, email, program)
+            student, warning = resolve_or_create_student(
+                db, student_number, name, email, program, gender, age
+            )
         except ValueError as e:
             errors.append({"row": row_number, "student_number": student_number, "reason": str(e)})
             continue
@@ -182,7 +306,7 @@ def process_bulk_upload(
         for criteria_id, column_name in criteria_column_map.items():
             raw_value = row.get(column_name)
             if raw_value in (None, ""):
-                continue  # no value submitted for this criterion in this row - not an error
+                continue
 
             criteria = criteria_lookup[criteria_id]
 
@@ -208,28 +332,71 @@ def process_bulk_upload(
             )
             db.add(event)
             success_count += 1
+            touched_student_ids.add(student.id)
+
+        for criteria_id, weekly_columns in weekly_criteria_column_map.items():
+            criteria = criteria_lookup[criteria_id]
+            weekly_raw_values = [row.get(col) for col in weekly_columns]
+
+            try:
+                event = build_weekly_criterion_event(
+                    student, unit_id, criteria, weekly_raw_values,
+                    EventSource.BULK_UPLOAD, lecturer_id, batch.id,
+                )
+            except ValueError as e:
+                errors.append({
+                    "row": row_number, "student_number": student_number,
+                    "criteria": criteria.name, "reason": str(e),
+                })
+                continue
+
+            range_error = validate_score(criteria, event.score)
+            if range_error:
+                errors.append({
+                    "row": row_number, "student_number": student_number,
+                    "criteria": criteria.name, "reason": range_error,
+                })
+                continue
+
+            db.add(event)
+            success_count += 1
+            touched_student_ids.add(student.id)
 
     batch.values_stored = success_count
     batch.values_failed = len(errors)
 
-    return batch, errors, warnings
+    return batch, errors, warnings, touched_student_ids
 
 
 def process_manual_entry(
     db: Session, unit_id: int, lecturer_id: int, student_number: str,
     name: Optional[str], email: Optional[str], program: Optional[str],
+    gender: Optional[str], age: Optional[int],
     scores: dict[int, float],
+    weekly_scores: Optional[dict[int, list]] = None,
 ) -> tuple[list[AssessmentEvent], list[dict], list[dict]]:
-    """Same validation path as bulk upload, minus the IngestionBatch -
+    """
+    Same validation path as bulk upload, minus the IngestionBatch -
     there's no file to group a single manual entry under, so batch_id
-    stays None on these events."""
-    criteria_lookup = get_unit_criteria_map(db, unit_id, scores.keys())
+    stays None on these events.
+
+    scores handles single-value criteria (Assessment, Moodle).
+    weekly_scores handles Attendance/Weekly Tut, using the SAME
+    aggregation logic as bulk upload - a lecturer typing 7 weekly
+    values manually gets an identical percentage + trend calculation
+    to a CSV column doing the same thing.
+    """
+    weekly_scores = weekly_scores or {}
+    all_criteria_ids = list(scores.keys()) + list(weekly_scores.keys())
+    criteria_lookup = get_unit_criteria_map(db, unit_id, all_criteria_ids)
 
     errors: list[dict] = []
     warnings: list[dict] = []
 
     try:
-        student, warning = resolve_or_create_student(db, student_number, name, email, program)
+        student, warning = resolve_or_create_student(
+            db, student_number, name, email, program, gender, age
+        )
     except ValueError as e:
         return [], [{"reason": str(e)}], []
 
@@ -239,6 +406,7 @@ def process_manual_entry(
     resolve_or_create_enrollment(db, student.id, unit_id)
 
     created_events: list[AssessmentEvent] = []
+
     for criteria_id, score in scores.items():
         criteria = criteria_lookup[criteria_id]
         range_error = validate_score(criteria, score)
@@ -249,6 +417,26 @@ def process_manual_entry(
         event = build_assessment_event(
             student, unit_id, criteria, score, EventSource.MANUAL, lecturer_id, None
         )
+        db.add(event)
+        created_events.append(event)
+
+    for criteria_id, weekly_raw_values in weekly_scores.items():
+        criteria = criteria_lookup[criteria_id]
+
+        try:
+            event = build_weekly_criterion_event(
+                student, unit_id, criteria, weekly_raw_values,
+                EventSource.MANUAL, lecturer_id, None,
+            )
+        except ValueError as e:
+            errors.append({"student_number": student_number, "criteria": criteria.name, "reason": str(e)})
+            continue
+
+        range_error = validate_score(criteria, event.score)
+        if range_error:
+            errors.append({"student_number": student_number, "criteria": criteria.name, "reason": range_error})
+            continue
+
         db.add(event)
         created_events.append(event)
 

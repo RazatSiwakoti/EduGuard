@@ -73,3 +73,6 @@ logs/
 
 # ── Docker ────────
 docker-compose.override.yml
+
+# Jupyter
+.ipynb_checkpoints/

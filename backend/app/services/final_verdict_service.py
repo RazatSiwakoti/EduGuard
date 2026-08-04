@@ -3,9 +3,12 @@ Final Verdict data-wiring layer - Phase 5.2.
 
 Fetches a student's most recent rule_based and ml_model RiskScore rows,
 runs them through hybrid_engine.reconcile(), and stages a FinalVerdict
-row. Does NOT commit - the calling route owns the transaction boundary.
+row. Also handles resolving a pending review, once a lecturer submits
+their manual decision. Does NOT commit - the calling route owns the
+transaction boundary.
 """
 
+from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 
 from app.models.risk_score import RiskScore
@@ -28,6 +31,7 @@ def get_latest_score(db: Session, student_id: int, unit_id: int, source: str, ch
         .order_by(RiskScore.computed_at.desc(), RiskScore.id.desc())
         .first()
     )
+
 
 def build_reason(rule_score: RiskScore, ml_score: RiskScore, requires_review: bool) -> str:
     """Combines both engines' own stored explanations into one final
@@ -70,4 +74,32 @@ def compute_and_stage_final_verdict(
         reason=build_reason(rule_score, ml_score, hybrid_result.requires_review),
     )
     db.add(verdict)
+    return verdict
+
+
+def submit_review_decision(db: Session, verdict_id: int, reviewer_id: int, decision: str) -> FinalVerdict:
+    """
+    Resolves a pending FinalVerdict with a lecturer's manual decision.
+
+    Guard order matters here: reviewed_by is checked FIRST, since a
+    successful review always sets requires_review=False too - checking
+    requires_review first would mask an already-reviewed verdict behind
+    a misleading "didn't require review" message.
+    """
+    verdict = db.query(FinalVerdict).filter(FinalVerdict.id == verdict_id).first()
+    if not verdict:
+        raise ValueError(f"FinalVerdict {verdict_id} not found")
+
+    if verdict.reviewed_by is not None:
+        raise ValueError(f"FinalVerdict {verdict_id} has already been reviewed")
+
+    if not verdict.requires_review:
+        raise ValueError(f"FinalVerdict {verdict_id} did not require review - nothing to resolve")
+
+    verdict.final_tier = decision
+    verdict.requires_review = False
+    verdict.reviewed_by = reviewer_id
+    verdict.review_decision = decision
+    verdict.reviewed_at = datetime.now(timezone.utc)
+
     return verdict

@@ -20,6 +20,7 @@ from app.api.routes.ingestion import router as ingestion_router
 from app.api.routes.criteria import router as criteria_router
 
 
+
 app = FastAPI(
     title=settings.APP_NAME,
     debug=settings.DEBUG
@@ -33,6 +34,8 @@ app.include_router(units_router)
 app.include_router(ingestion_router)
 app.include_router(criteria_router)
 app.include_router(risk.router)
+app.include_router(risk.unit_router)
+
 
 @app.get("/")
 def root():

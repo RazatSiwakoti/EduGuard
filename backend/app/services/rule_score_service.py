@@ -14,7 +14,11 @@ from sqlalchemy.orm import Session
 from app.models.criteria import Criteria
 from app.models.assessment_event import AssessmentEvent
 from app.models.risk_score import RiskScore
-from app.services.rule_engine import CriterionInput, compute_rule_based_risk
+from app.services.rule_engine import (
+    CriterionInput,
+    compute_rule_based_risk,
+    build_rule_explanation,
+)
 
 
 def get_latest_criterion_value(db: Session, student_id: int, criteria_id: int) -> Optional[float]:
@@ -84,6 +88,10 @@ def build_criterion_inputs(
 def compute_and_stage_rule_score(
     db: Session, student_id: int, unit_id: int, checkpoint_week: int = 8
 ) -> RiskScore:
+    """
+    Full pipeline: fetch -> calculate -> stage a RiskScore row.
+    Does NOT commit - the calling route commits.
+    """
     criterion_inputs, missing_categories = build_criterion_inputs(db, student_id, unit_id)
     result = compute_rule_based_risk(criterion_inputs)
 

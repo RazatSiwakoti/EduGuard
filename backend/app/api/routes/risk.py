@@ -16,8 +16,17 @@ from app.services.rule_score_service import compute_and_stage_rule_score
 from app.services.ml_score_service import compute_and_stage_ml_score
 from app.models.final_verdicts import FinalVerdict
 from app.services.final_verdict_service import compute_and_stage_final_verdict
+from app.models.enrollment import Enrollment
+from app.services.analysis_service import run_analysis_for_students
+from app.schemas.risk import VerdictReviewSubmit, PendingReviewItem, VerdictReviewResult
+from app.services.final_verdict_service import submit_review_decision
+
 
 router = APIRouter(prefix="/units/{unit_id}/students/{student_id}/risk", tags=["Risk Scoring"])
+
+
+# Separate router since this endpoint is unit-wide, not per-student
+unit_router = APIRouter(prefix="/units/{unit_id}/risk", tags=["Risk Scoring"])
 
 
 def _get_unit_or_404(db: Session, unit_id: int) -> Unit:
@@ -136,3 +145,98 @@ def compute_final_verdict(
         "ml_score_id": verdict.ml_score_id,
         "checkpoint_week": verdict.checkpoint_week,
     }
+
+
+
+@unit_router.post("/run-analysis", status_code=status.HTTP_200_OK)
+def run_analysis(
+    unit_id: int,
+    checkpoint_week: int = 8,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.LECTURER)),
+):
+    """The 'Run Analysis' refresh button - recomputes rule + ML + hybrid
+    for every currently enrolled student in this unit, using whatever
+    data currently exists (no new upload required)."""
+    unit = _get_unit_or_404(db, unit_id)
+    _require_assigned_lecturer(unit, current_user)
+
+    enrollments = db.query(Enrollment).filter(Enrollment.unit_id == unit_id).all()
+    student_ids = [e.student_id for e in enrollments]
+
+    if not student_ids:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No enrolled students in this unit")
+
+    try:
+        summary = run_analysis_for_students(db, unit_id, student_ids, checkpoint_week)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Analysis run failed")
+
+    return summary
+
+
+@unit_router.get("/pending-review", response_model=list[PendingReviewItem])
+def list_pending_reviews(
+    unit_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.LECTURER)),
+):
+    unit = _get_unit_or_404(db, unit_id)
+    _require_assigned_lecturer(unit, current_user)
+
+    verdicts = (
+        db.query(FinalVerdict)
+        .filter(FinalVerdict.unit_id == unit_id, FinalVerdict.requires_review == True)  # noqa: E712
+        .order_by(FinalVerdict.id)
+        .all()
+    )
+
+    return [
+        PendingReviewItem(
+            verdict_id=v.id,
+            student_id=v.student_id,
+            checkpoint_week=v.checkpoint_week,
+            reason=v.reason,
+        )
+        for v in verdicts
+    ]
+
+
+@unit_router.patch("/verdicts/{verdict_id}/review", response_model=VerdictReviewResult)
+def review_verdict(
+    unit_id: int,
+    verdict_id: int,
+    payload: VerdictReviewSubmit,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.LECTURER)),
+):
+    unit = _get_unit_or_404(db, unit_id)
+    _require_assigned_lecturer(unit, current_user)
+
+    verdict = db.query(FinalVerdict).filter(FinalVerdict.id == verdict_id).first()
+    if not verdict:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Verdict not found")
+    if verdict.unit_id != unit_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Verdict does not belong to this unit")
+
+    try:
+        updated = submit_review_decision(db, verdict_id, current_user.id, payload.review_decision)
+        db.commit()
+        db.refresh(updated)
+    except ValueError as e:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Review submission failed")
+
+    return VerdictReviewResult(
+        verdict_id=updated.id,
+        final_tier=updated.final_tier,
+        requires_review=updated.requires_review,
+        reviewed_by=updated.reviewed_by,
+        review_decision=updated.review_decision,
+        reviewed_at=updated.reviewed_at,
+    )

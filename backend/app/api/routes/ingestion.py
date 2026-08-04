@@ -15,7 +15,7 @@ from typing import Optional
 import pandas as pd
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
-
+from app.services.analysis_service import run_analysis_for_students, run_analysis_for_student
 from app.core.dependencies import require_role
 from app.database import get_db
 from app.models.enums import UserRole
@@ -77,6 +77,7 @@ def _sanitize_row(row: dict) -> dict:
 # -------------------------
 # BULK UPLOAD
 # -------------------------
+
 @router.post("/bulk", response_model=BulkIngestionResult, status_code=status.HTTP_201_CREATED)
 async def bulk_ingest(
     unit_id: int,
@@ -108,14 +109,11 @@ async def bulk_ingest(
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Could not parse file: {e}")
 
-    # Sanitize AFTER to_dict(), per-cell, using pd.isna-equivalent logic -
-    # this is the only point that reliably catches NaN regardless of the
-    # column's dtype. See _sanitize_row/_sanitize_cell docstring above.
     raw_rows = df.to_dict(orient="records")
     rows = [_sanitize_row(r) for r in raw_rows]
 
     try:
-        batch, errors, warnings = ingestion_service.process_bulk_upload(
+        batch, errors, warnings, touched_student_ids = ingestion_service.process_bulk_upload(
             db=db,
             unit_id=unit_id,
             lecturer_id=current_user.id,
@@ -126,7 +124,15 @@ async def bulk_ingest(
             email_col=mapping_data.email_col,
             program_col=mapping_data.program_col,
             criteria_column_map=mapping_data.criteria_column_map,
+            weekly_criteria_column_map=mapping_data.weekly_criteria_column_map,
         )
+
+        analysis_summary = None
+        if touched_student_ids:
+            analysis_summary = run_analysis_for_students(
+                db, unit_id, list(touched_student_ids), checkpoint_week=8
+            )
+
         db.commit()
     except ValueError as e:
         db.rollback()
@@ -146,12 +152,10 @@ async def bulk_ingest(
         values_failed=batch.values_failed,
         errors=[IngestionRowError(**e) for e in errors],
         warnings=[IngestionRowWarning(**w) for w in warnings],
+        analysis_summary=analysis_summary,
     )
 
 
-# -------------------------
-# MANUAL ENTRY
-# -------------------------
 @router.post("/manual", response_model=ManualEntryResult, status_code=status.HTTP_201_CREATED)
 def manual_ingest(
     unit_id: int,
@@ -171,8 +175,17 @@ def manual_ingest(
             name=payload.name,
             email=payload.email,
             program=payload.program,
+            gender=payload.gender,
+            age=payload.age,
             scores=payload.scores,
+            weekly_scores=payload.weekly_scores,
         )
+
+        analysis_result = None
+        if events:
+            student_id = events[0].student_id
+            analysis_result = run_analysis_for_student(db, student_id, unit_id, checkpoint_week=8)
+
         db.commit()
     except ValueError as e:
         db.rollback()
@@ -186,4 +199,5 @@ def manual_ingest(
         events_created=len(events),
         errors=[IngestionRowError(**e) for e in errors],
         warnings=[IngestionRowWarning(**w) for w in warnings],
+        analysis_result=analysis_result,
     )

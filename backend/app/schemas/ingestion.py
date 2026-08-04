@@ -9,24 +9,13 @@ from pydantic import BaseModel
 
 
 class BulkIngestionMapping(BaseModel):
-    """
-    Sent as a JSON string in a Form field alongside the uploaded file
-    (single-phase, per Phase 4 decision - no separate preview step yet).
-    Keys on the right are the lecturer's actual file column headers.
-    """
     student_number_col: str
     name_col: str
     email_col: Optional[str] = None
     program_col: Optional[str] = None
-
-    # criteria_id -> column_name. Used for criteria that are already a
-    # single value per student (Assessment, Moodle).
+    gender_col: Optional[str] = None
+    age_col: Optional[str] = None
     criteria_column_map: dict[int, str]
-
-    # criteria_id -> list of column_names, one per tracked week, in
-    # week order. Used ONLY for Attendance/Weekly Tut, where the raw
-    # file has one column per week rather than one pre-calculated value.
-    # Defaults to empty so existing uploads with no weekly data still work.
     weekly_criteria_column_map: dict[int, list[str]] = {}
 
 
@@ -43,6 +32,22 @@ class IngestionRowWarning(BaseModel):
     message: str
 
 
+class StudentAnalysisResult(BaseModel):
+    student_id: int
+    rule_level: str
+    ml_level: str
+    final_tier: Optional[str]
+    requires_review: bool
+
+
+class AnalysisSummary(BaseModel):
+    total_students: int
+    succeeded: int
+    failed: int
+    results: list[StudentAnalysisResult]
+    errors: list[dict]
+
+
 class BulkIngestionResult(BaseModel):
     total_rows: int
     rows_with_errors: int
@@ -52,6 +57,7 @@ class BulkIngestionResult(BaseModel):
     filename: str
     errors: list[IngestionRowError]
     warnings: list[IngestionRowWarning]
+    analysis_summary: Optional[AnalysisSummary] = None
 
 
 class ManualEntryCreate(BaseModel):
@@ -59,8 +65,18 @@ class ManualEntryCreate(BaseModel):
     name: Optional[str] = None
     email: Optional[str] = None
     program: Optional[str] = None
-    # criteria_id -> score
-    scores: dict[int, float]
+    gender: Optional[str] = None
+    age: Optional[int] = None
+
+    # criteria_id -> score, for single-value criteria (Assessment, Moodle)
+    scores: dict[int, float] = {}
+
+    # criteria_id -> list of raw weekly values IN WEEK ORDER, for
+    # Attendance ("yes"/"no", "1"/"0", "true"/"false" per week - exactly
+    # 7 values) or Weekly Tut ("submitted"/"late"/"not_submitted" per
+    # week - exactly 6 values, weeks 2-7). Wrong length still computes a
+    # percentage but skips the trend value rather than erroring.
+    weekly_scores: dict[int, list[str]] = {}
 
 
 class ManualEntryResult(BaseModel):
@@ -68,3 +84,4 @@ class ManualEntryResult(BaseModel):
     events_created: int
     errors: list[IngestionRowError]
     warnings: list[IngestionRowWarning]
+    analysis_result: Optional[StudentAnalysisResult] = None

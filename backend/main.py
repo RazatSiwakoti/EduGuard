@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routers import student_overview, students, dashboard
+from routers import student_overview, students, dashboard, predictions
 
 app = FastAPI(title="InRisk API")
 
@@ -18,6 +18,7 @@ app.add_middleware(
 app.include_router(students.router)
 app.include_router(student_overview.router)
 app.include_router(dashboard.router)
+app.include_router(predictions.router)
 
 
 @app.get("/")

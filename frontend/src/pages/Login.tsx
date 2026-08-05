@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { login as loginRequest } from "../services/authService";
 import { useAuth } from "../context/AuthContext";
+import { getRedirectPath } from "../utils/getRedirectPath";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -18,9 +19,14 @@ export default function Login() {
     setIsSubmitting(true);
 
     try {
-      const { access_token } = await loginRequest({ email, password });
-      await login(access_token); // stores token + fetches /auth/me
-      navigate("/dashboard");
+        const { access_token } = await loginRequest ({ email, password });
+        const loggedInUser = await login(access_token);
+        navigate(getRedirectPath(loggedInUser.role));
+    
+
+
+
+
     } catch {
       // Deliberately generic — doesn't reveal whether the email or
       // the password was the wrong part, standard security practice.

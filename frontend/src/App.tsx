@@ -1,9 +1,8 @@
-import './App.css'
 import { Routes, Route, Navigate } from "react-router-dom";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
+import SuperAdminDashboard from "./pages/SuperAdminDashboard";
 import ProtectedRoute from "./components/ProtectedRoute";
-
 
 function App() {
   return (
@@ -17,7 +16,14 @@ function App() {
           </ProtectedRoute>
         }
       />
-      {/* Any unmatched path falls back to login */}
+      <Route
+        path="/super-admin"
+        element={
+          <ProtectedRoute allowedRoles={["super_admin"]}>
+            <SuperAdminDashboard />
+          </ProtectedRoute>
+        }
+      />
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
   );

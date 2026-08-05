@@ -1,17 +1,19 @@
 import type { ReactNode } from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import type { UserRole } from "../types/auth";
 
 interface ProtectedRouteProps {
   children: ReactNode;
+  // If provided, only these roles may view this route.
+  // Omit to just require "any logged-in user".
+  allowedRoles?: UserRole[];
 }
 
-// Wraps any page that requires a logged-in user.
-// Redirects to /login if there's no valid session.
-// Renders nothing while the session restore check is still running,
-// to avoid a flash of the login redirect before we actually know
-// whether the user is authenticated.
-export default function ProtectedRoute({ children }: ProtectedRouteProps) {
+export default function ProtectedRoute({
+  children,
+  allowedRoles,
+}: ProtectedRouteProps) {
   const { user, isLoading } = useAuth();
 
   if (isLoading) {
@@ -20,6 +22,11 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
 
   if (!user) {
     return <Navigate to="/login" replace />;
+  }
+
+  // Logged in, but wrong role for this specific route.
+  if (allowedRoles && !allowedRoles.includes(user.role)) {
+    return <Navigate to="/dashboard" replace />;
   }
 
   return <>{children}</>;

@@ -11,7 +11,7 @@ import { getCurrentUser } from "../services/authService";
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
-  login: (accessToken: string) => Promise<void>;
+  login: (accessToken: string) => Promise<User>;
   logout: () => void;
 }
 
@@ -46,10 +46,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Stores the token, then immediately fetches the full profile
   // (role, full_name, etc.) since the login response itself only
   // contains the token, not user details.
-  async function login(accessToken: string) {
+  async function login(accessToken: string): Promise<User> {
     localStorage.setItem("access_token", accessToken);
     const currentUser = await getCurrentUser();
     setUser(currentUser);
+    return currentUser;
   }
 
   function logout() {

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import * as AlertDialog from "@radix-ui/react-alert-dialog";
 import * as Dialog from "@radix-ui/react-dialog";
+import type { ReactNode } from "react";
 import type { User } from "../types/auth";
 
 interface UserManagementHooks {
@@ -21,23 +22,30 @@ interface UserManagementHooks {
   useDelete: () => { mutate: (id: number) => void };
 }
 
+// Optional additional table column — lets a specific page (e.g. Lecturers)
+// show extra per-row info without forking this component or duplicating
+// the whole table. Pages that don't need it (e.g. Admins) simply omit it.
+interface ExtraColumn {
+  header: string;
+  render: (user: User) => ReactNode;
+}
+
 interface UserManagementPanelProps {
   title: string;
   subtitle: string;
   createButtonLabel: string;
   emptyStateLabel: string;
   hooks: UserManagementHooks;
+  extraColumns?: ExtraColumn[];
 }
 
-// Reusable table + create modal + delete confirm for any role-managed
-// user list (Admins, Lecturers). Both pages that use this share
-// identical UI and behavior, driven entirely by which hooks are passed in.
 export default function UserManagementPanel({
   title,
   subtitle,
   createButtonLabel,
   emptyStateLabel,
   hooks,
+  extraColumns = [],
 }: UserManagementPanelProps) {
   const [showInactive, setShowInactive] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -95,9 +103,7 @@ export default function UserManagementPanel({
       </label>
 
       <div className="overflow-hidden rounded-md border border-stone-200 bg-white">
-        {isLoading && (
-          <p className="p-6 text-sm text-stone-500">Loading…</p>
-        )}
+        {isLoading && <p className="p-6 text-sm text-stone-500">Loading…</p>}
         {isError && (
           <p className="p-6 text-sm text-red-600">
             Failed to load. Try refreshing.
@@ -114,6 +120,11 @@ export default function UserManagementPanel({
                 <th className="px-4 py-2 font-medium">Email</th>
                 <th className="px-4 py-2 font-medium">Status</th>
                 <th className="px-4 py-2 font-medium">Last login</th>
+                {extraColumns.map((col) => (
+                  <th key={col.header} className="px-4 py-2 font-medium">
+                    {col.header}
+                  </th>
+                ))}
                 <th className="px-4 py-2 font-medium">Actions</th>
               </tr>
             </thead>
@@ -138,6 +149,11 @@ export default function UserManagementPanel({
                       ? new Date(u.last_login).toLocaleString()
                       : "Never"}
                   </td>
+                  {extraColumns.map((col) => (
+                    <td key={col.header} className="px-4 py-2.5">
+                      {col.render(u)}
+                    </td>
+                  ))}
                   <td className="px-4 py-2.5">
                     <div className="flex gap-2">
                       {u.is_active ? (

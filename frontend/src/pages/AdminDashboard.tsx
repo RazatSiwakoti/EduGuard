@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import UserManagementPanel from "../components/UserManagementPanel";
+import UnitsPanel from "../components/UnitsPanel";
+import LecturerUnitsCell from "../components/LecturerUnitsCell";
 import {
   useLecturersList,
   useCreateLecturer,
@@ -13,13 +15,17 @@ type Tab = "lecturers" | "units";
 
 export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState<Tab>("lecturers");
-  const { logout } = useAuth();
-
-  return (
+  const { user, logout } = useAuth();
+   return (
     <div className="min-h-screen bg-stone-50 px-6 py-8">
-      <div className="mx-auto max-w-4xl">
+      <div className="mx-auto max-w-5xl">
         <div className="mb-6 flex items-center justify-between">
-          <h1 className="text-xl font-semibold text-stone-900">Admin</h1>
+          <div>
+            <p className="text-sm text-stone-500">{user?.full_name}</p>
+            <h1 className="text-xl font-semibold text-stone-900">
+              Admin Panel
+            </h1>
+          </div>
           <button
             onClick={logout}
             className="rounded border border-stone-300 px-3 py-1.5 text-sm font-medium text-stone-700 transition hover:bg-stone-100"
@@ -64,14 +70,18 @@ export default function AdminDashboard() {
               useReactivate: useReactivateLecturer,
               useDelete: useDeleteLecturer,
             }}
+            extraColumns={[
+              {
+                header: "Teaching",
+                render: (lecturer) => (
+                  <LecturerUnitsCell lecturerId={lecturer.id} />
+                ),
+              },
+            ]}
           />
         )}
 
-        {activeTab === "units" && (
-          <p className="text-sm text-stone-500">
-            Unit management — coming next.
-          </p>
-        )}
+        {activeTab === "units" && <UnitsPanel />}
       </div>
     </div>
   );

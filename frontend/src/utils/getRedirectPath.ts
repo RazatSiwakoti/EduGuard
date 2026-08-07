@@ -8,7 +8,7 @@ export function getRedirectPath(role: UserRole): string {
     case "super_admin":
       return "/super-admin";
     case "admin":
-      return "/dashboard"; // placeholder until AdminDashboard exists
+      return "/admin"; // placeholder until AdminDashboard exists
     case "lecturer":
       return "/dashboard"; // placeholder until LecturerDashboard exists
     case "student":

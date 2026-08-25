@@ -20,10 +20,11 @@ from app.core.dependencies import require_role
 from app.database import get_db
 from app.models.enums import UserRole
 from app.models.user import User
-from app.schemas.dashboard import LecturerDashboardResponse
+from app.schemas.dashboard import DashboardUnit, LecturerDashboardResponse
 from app.services.dashboard_service import (
     DEFAULT_CHECKPOINT_WEEK,
     get_lecturer_dashboard,
+    list_lecturer_units,
 )
 
 router = APIRouter(
@@ -60,3 +61,23 @@ def read_lecturer_dashboard(
     and the frontend renders a proper empty state for it.
     """
     return get_lecturer_dashboard(db, current_user.id, checkpoint_week)
+
+@router.get("/units", response_model=list[DashboardUnit])
+def read_lecturer_units(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.LECTURER)),
+):
+    """
+    Just the units this lecturer is assigned to - no cohort, no scores.
+
+    Every screen outside the dashboard needs this list: the units page,
+    the unit switcher, and the import wizard's "which unit am I
+    uploading into" context. Those could technically read units off
+    /lecturer/dashboard, but that endpoint drags every enrolled student
+    and their criterion scores along with it - an expensive payload to
+    fetch when all you wanted was a handful of unit codes.
+
+    Reuses DashboardUnit rather than defining a near-identical schema,
+    since it already carries exactly these fields.
+    """
+    return list_lecturer_units(db, current_user.id)

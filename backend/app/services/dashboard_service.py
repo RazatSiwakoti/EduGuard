@@ -64,6 +64,34 @@ def _fetch_units(db: Session, lecturer_id: int) -> list[Unit]:
     return list(db.execute(stmt).scalars().all())
 
 
+def _unit_to_dict(unit: Unit) -> dict:
+    """
+    One place that decides what a unit looks like over the wire, so the
+    dashboard payload and the standalone units list can never describe
+    the same unit differently.
+    """
+    return {
+        "id": unit.id,
+        "unit_code": unit.unit_code,
+        "unit_name": unit.unit_name,
+        "year": unit.year,
+        "teaching_period": unit.teaching_period,
+        "level": unit.level,
+        "enrolled_count": unit.enrolled_count,
+    }
+
+
+def list_lecturer_units(db: Session, lecturer_id: int) -> list[dict]:
+    """
+    The lecturer's units on their own, with no cohort data attached.
+
+    Public counterpart to the private _fetch_units helper - used by
+    GET /lecturer/units for every screen that needs a unit list without
+    paying for the full dashboard payload.
+    """
+    return [_unit_to_dict(u) for u in _fetch_units(db, lecturer_id)]
+
+
 def _fetch_enrollments(db: Session, unit_ids: list[int]) -> list[tuple[Student, int]]:
     """
     Every (student, unit_id) pair across the lecturer's units.
@@ -302,21 +330,10 @@ def get_lecturer_dashboard(
             }
         )
 
-    units_payload = [
-        {
-            "id": u.id,
-            "unit_code": u.unit_code,
-            "unit_name": u.unit_name,
-            "year": u.year,
-            "teaching_period": u.teaching_period,
-            "level": u.level,
-            "enrolled_count": u.enrolled_count,
-        }
-        for u in units
-    ]
-
     return {
-        "units": units_payload,
+        # Same helper GET /lecturer/units uses, so both endpoints always
+        # describe a unit identically.
+        "units": [_unit_to_dict(u) for u in units],
         "students": students_payload,
         "checkpoint_week": checkpoint_week,
     }

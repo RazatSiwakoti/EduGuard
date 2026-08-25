@@ -19,6 +19,34 @@ class BulkIngestionMapping(BaseModel):
     weekly_criteria_column_map: dict[int, list[str]] = {}
 
 
+class FilePreviewResult(BaseModel):
+    """
+    What the import wizard needs before a lecturer can map anything:
+    the file's actual column headers, and enough sample rows to confirm
+    they picked the right file and that the columns hold what they
+    expect.
+
+    Exists because mapping columns to criteria is impossible until the
+    lecturer can SEE their columns, and the /bulk endpoint requires the
+    mapping and the file in the same request. Parsing here rather than
+    in the browser means .xlsx and .xls work identically to .csv -
+    pandas already handles all three, whereas a browser would need a
+    large extra library just to read a spreadsheet.
+
+    Nothing is written to the database by a preview. It is a pure
+    read-and-describe, so a lecturer can safely try a file, look at it,
+    and change their mind.
+    """
+
+    filename: str
+    columns: list[str]
+    total_rows: int
+    # Capped server-side - a preview only has to prove the file parsed
+    # correctly, and shipping an entire cohort back would defeat the
+    # point of a lightweight preview step.
+    sample_rows: list[dict]
+
+
 class IngestionRowError(BaseModel):
     row: Optional[int] = None
     student_number: Optional[str] = None

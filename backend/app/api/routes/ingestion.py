@@ -9,6 +9,7 @@ lecturer owns THIS unit."
 """
 
 import io
+import json
 import math
 from typing import Optional
 
@@ -24,6 +25,7 @@ from app.models.user import User
 from app.schemas.ingestion import (
     BulkIngestionMapping,
     BulkIngestionResult,
+    FilePreviewResult,
     IngestionRowError,
     IngestionRowWarning,
     ManualEntryCreate,
@@ -74,6 +76,89 @@ def _sanitize_row(row: dict) -> dict:
     return {key: _sanitize_cell(val) for key, val in row.items()}
 
 
+def _parse_upload(filename: str, contents: bytes) -> pd.DataFrame:
+    """
+    Turns an uploaded .csv/.xlsx/.xls into a DataFrame.
+
+    Extracted so /preview and /bulk parse identically. If these two ever
+    drifted apart, a lecturer could map columns off a preview that the
+    real upload then reads differently - which would fail in the most
+    confusing way possible, silently and only for some files.
+    """
+    try:
+        if filename.lower().endswith(".csv"):
+            return pd.read_csv(io.BytesIO(contents))
+        if filename.lower().endswith((".xlsx", ".xls")):
+            return pd.read_excel(io.BytesIO(contents))
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Could not parse file: {e}",
+        )
+
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="File must be .csv, .xlsx, or .xls",
+    )
+
+
+# -------------------------
+# FILE PREVIEW
+# -------------------------
+
+@router.post("/preview", response_model=FilePreviewResult)
+async def preview_upload(
+    unit_id: int,
+    file: UploadFile = File(...),
+    sample_size: int = 5,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.LECTURER)),
+):
+    """
+    Reads an uploaded file and reports its column headers plus a few
+    sample rows, WITHOUT storing anything.
+
+    This is step one of the import wizard: a lecturer cannot map columns
+    to criteria until they can see what columns their file actually has.
+    Because /bulk needs the mapping and the file together in one
+    request, that mapping has to be built beforehand - which is what
+    this endpoint makes possible.
+
+    Same lecturer-owns-this-unit check as every other route here: a
+    preview reveals real student data from the file, so it is gated
+    exactly as tightly as the upload itself.
+    """
+    unit = _get_unit_or_404(db, unit_id)
+    _require_assigned_lecturer(unit, current_user)
+
+    filename = file.filename or "upload"
+    contents = await file.read()
+    df = _parse_upload(filename, contents)
+
+    # Hard cap regardless of what the client asks for - a preview only
+    # needs to prove the file parsed correctly.
+    capped = max(1, min(sample_size, 20))
+
+    # Round-tripped through pandas' own JSON writer rather than
+    # to_dict(). to_dict can hand back numpy scalars (int64, bool_) and
+    # Timestamps depending on the pandas version and column dtype, and
+    # FastAPI cannot serialise those - it raises "Object of type int64
+    # is not JSON serializable" only for certain files, which is a
+    # miserable bug to chase. to_json handles every numpy type and turns
+    # NaN into null in one step.
+    sample = json.loads(df.head(capped).to_json(orient="records"))
+
+    return FilePreviewResult(
+        filename=filename,
+        # Cast to str: pandas infers a numeric column header (e.g. a
+        # file whose headers are years) as int64, which is not a valid
+        # str for the response model and would fail validation.
+        columns=[str(c) for c in df.columns],
+        total_rows=len(df.index),
+        sample_rows=sample,
+    )
+
+
 # -------------------------
 # BULK UPLOAD
 # -------------------------
@@ -97,17 +182,9 @@ async def bulk_ingest(
     filename = file.filename or "upload"
     contents = await file.read()
 
-    try:
-        if filename.lower().endswith(".csv"):
-            df = pd.read_csv(io.BytesIO(contents))
-        elif filename.lower().endswith((".xlsx", ".xls")):
-            df = pd.read_excel(io.BytesIO(contents))
-        else:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File must be .csv, .xlsx, or .xls")
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Could not parse file: {e}")
+    # Shared with /preview so a mapping built against the preview can
+    # never be applied to a differently-parsed file.
+    df = _parse_upload(filename, contents)
 
     raw_rows = df.to_dict(orient="records")
     rows = [_sanitize_row(r) for r in raw_rows]
@@ -123,6 +200,15 @@ async def bulk_ingest(
             name_col=mapping_data.name_col,
             email_col=mapping_data.email_col,
             program_col=mapping_data.program_col,
+            # BUGFIX: these two were accepted by BulkIngestionMapping and
+            # supported by process_bulk_upload, but never passed through -
+            # so every bulk upload silently discarded gender and age.
+            # Both are real ML features on Student, and manual entry has
+            # always stored them, so bulk-uploaded students were being
+            # scored on strictly less information than manually entered
+            # ones without anything reporting it.
+            gender_col=mapping_data.gender_col,
+            age_col=mapping_data.age_col,
             criteria_column_map=mapping_data.criteria_column_map,
             weekly_criteria_column_map=mapping_data.weekly_criteria_column_map,
         )

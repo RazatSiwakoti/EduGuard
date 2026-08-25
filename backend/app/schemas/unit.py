@@ -45,3 +45,6 @@ class UnitOut(BaseModel):
     status: str
     is_active: bool
     lecturer: Optional[UserOut] = None
+     # Computed on the model itself, not stored - see Unit.enrolled_count.
+    enrolled_count: int
+

@@ -18,12 +18,25 @@ from app.api.routes.admin import router as admin_router
 from app.api.routes.units import router as units_router
 from app.api.routes.ingestion import router as ingestion_router
 from app.api.routes.criteria import router as criteria_router
-
+from fastapi.middleware.cors import CORSMiddleware
 
 
 app = FastAPI(
     title=settings.APP_NAME,
     debug=settings.DEBUG
+)
+# Allows the React dev server (different port = different origin) to call
+# this API. Restricted to localhost dev origins only — this list must be
+# updated with the real deployed frontend URL before going to production.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",  # Vite's default dev port
+        "http://127.0.0.1:5173",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 #register routers

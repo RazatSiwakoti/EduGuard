@@ -58,3 +58,14 @@ class Unit(Base):
     assessment_events = relationship("AssessmentEvent", back_populates="unit")
     risk_scores = relationship("RiskScore", back_populates="unit")
     ingestion_batches = relationship("IngestionBatch", back_populates="unit")
+    
+    @property
+    def enrolled_count(self) -> int:
+        """
+        Computed live from the enrollments relationship - never stored,
+        so there's nothing to keep in sync. Whether a student arrives via
+        bulk upload or manual entry (both go through
+        ingestion_service.resolve_or_create_enrollment), this reflects it
+        immediately without any extra update step anywhere.
+        """
+        return len(self.enrollments)

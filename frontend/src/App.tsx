@@ -1,56 +1,68 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
+import UnitsPage from "./pages/UnitsPage";
+import StudentsPage from "./pages/StudentsPage";
+import AlertsPage from "./pages/AlertsPage";
+import ReportsPage from "./pages/ReportsPage";
 import SuperAdminDashboard from "./pages/SuperAdminDashboard";
 import AdminDashboard from "./pages/AdminDashboard";
 import AccountPage from "./pages/AccountPage";
 import SettingsPage from "./pages/SettingsPage";
 import ProtectedRoute from "./components/ProtectedRoute";
+import RoleRoute from "./components/RoleRoute";
 
+/**
+ * Route table.
+ *
+ * Restructured in Phase 7.2 from a flat list of routes — each wrapping
+ * itself in <ProtectedRoute> — into a NESTED layout.
+ *
+ * The old shape rebuilt the header on every single navigation, because
+ * each route rendered its own copy. Now ProtectedRoute is the parent of
+ * every signed-in page and renders the shell once; matched children
+ * appear through its <Outlet />.
+ *
+ * Two levels of guard, each doing one job:
+ *   ProtectedRoute — is anyone signed in? Renders the shell.
+ *   RoleRoute      — is this role allowed here? Renders a bare Outlet,
+ *                    so nesting it does not produce a second sidebar.
+ */
 function App() {
   return (
     <Routes>
+      {/* Login sits outside the shell — no sidebar before sign-in. */}
       <Route path="/login" element={<Login />} />
-      <Route
-        path="/dashboard"
-        element={
-          <ProtectedRoute>
-            <Dashboard />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/super-admin"
-        element={
-          <ProtectedRoute allowedRoles={["super_admin"]}>
-            <SuperAdminDashboard />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/admin"
-        element={
-          <ProtectedRoute allowedRoles={["admin"]}>
-            <AdminDashboard />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/account"
-        element={
-          <ProtectedRoute>
-            <AccountPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/settings"
-        element={
-          <ProtectedRoute>
-            <SettingsPage />
-          </ProtectedRoute>
-        }
-      />
+
+      <Route element={<ProtectedRoute />}>
+        {/* Available to every signed-in role. */}
+        <Route path="/account" element={<AccountPage />} />
+        <Route path="/settings" element={<SettingsPage />} />
+
+        {/* Lecturer workspace. Dashboard is live; the rest are routed
+            placeholders so the navigation is complete and no sidebar
+            item is a dead link. */}
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/units" element={<UnitsPage />} />
+        <Route path="/students" element={<StudentsPage />} />
+        <Route path="/alerts" element={<AlertsPage />} />
+        <Route path="/reports" element={<ReportsPage />} />
+
+        {/* Role-gated sections. The nested RoleRoute adds the check
+            without re-rendering the shell around it. */}
+        <Route element={<RoleRoute allowedRoles={["admin"]} />}>
+          <Route path="/admin" element={<AdminDashboard />} />
+        </Route>
+
+        <Route element={<RoleRoute allowedRoles={["super_admin"]} />}>
+          <Route path="/super-admin" element={<SuperAdminDashboard />} />
+        </Route>
+      </Route>
+
+      {/* Unknown path. Sending signed-out users to /login is correct;
+          a signed-in user hitting a typo is bounced to /login too and
+          then immediately redirected onward by the login page's own
+          role-based redirect. */}
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
   );

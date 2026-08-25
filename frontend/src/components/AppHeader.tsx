@@ -1,39 +1,30 @@
 import { Link } from "react-router-dom";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { Bell, ChevronDown, ShieldCheck } from "lucide-react";
+import { Bell, ChevronDown } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { getInitials, formatRole } from "../utils/userDisplay";
 
-// Top bar shown on every authenticated page (rendered once, inside
-// ProtectedRoute, rather than duplicated per page). Left side is the
-// EdGuard brand block; right side is notifications + the user menu.
+// Top bar for every authenticated page. Mounted ONCE by AppShell as
+// part of the layout route, so it survives navigation instead of being
+// rebuilt per page.
+//
+// The brand block moved to SideNav when the sidebar was introduced — a
+// product name belongs in the app's top-left corner, and rendering it
+// in both places read as a duplicated logo. This side of the header is
+// now free for page-level context (breadcrumbs, a unit switcher) as
+// those arrive.
 export default function AppHeader() {
   const { user, logout } = useAuth();
 
   if (!user) return null;
 
   return (
-    <header className="flex items-center justify-between border-b border-stone-200 bg-white px-6 py-3">
-      {/* Brand block — placeholder icon for now. Swap the div below for
-          an <img src="/logo.png" .../> once the real logo asset is added. */}
-      <div className="flex items-center gap-3">
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-blue-600 to-green-500">
-          <ShieldCheck className="h-5 w-5 text-white" strokeWidth={2.5} />
-        </div>
-        <div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-lg font-bold text-stone-900">
-              Ed<span className="font-semibold italic text-blue-600">Guard</span>
-            </span>
-            <span className="text-xs font-medium uppercase tracking-wide text-stone-400">
-              KOI · V2.4
-            </span>
-          </div>
-          <p className="text-xs italic text-stone-400">
-            Early Detection · Timely Action · Better Outcomes
-          </p>
-        </div>
-      </div>
+    // Fixed height matches the sidebar's brand block, so the two
+    // borders meet in one unbroken horizontal line across the top.
+    <header className="flex h-[57px] shrink-0 items-center justify-between border-b border-stone-200 bg-white px-6">
+      <p className="truncate text-xs italic text-stone-400">
+        Early Detection · Timely Action · Better Outcomes
+      </p>
 
       {/* Right side: notifications + user menu */}
       <div className="flex items-center gap-4">

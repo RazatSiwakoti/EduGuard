@@ -40,6 +40,51 @@ def get_latest_criterion_value(db: Session, student_id: int, criteria_id: int) -
     return event.score if event else None
 
 
+def normalise_to_percentage(value: Optional[float], criteria: Criteria) -> Optional[float]:
+    """
+    Converts a raw stored score onto the 0-100 scale the rule engine's
+    thresholds are expressed in.
+
+    WHY THIS EXISTS - the scale bug it fixes
+    ----------------------------------------
+    AssessmentEvent.score is stored RAW: a quiz marked out of 20 stores
+    15, not 75. CriterionInput's own docstring requires `actual` to be
+    "already normalised to a comparable scale (percentage for
+    Attendance/Assessment/Tutorial)" - but this layer used to pass the
+    raw value straight through.
+
+    The ML engine, meanwhile, has always normalised: ml_score_service
+    computes (latest / criteria.max_score) * 100 for assessments. So the
+    two engines were reading the SAME database row on DIFFERENT scales.
+
+    A student scoring 15/20 against a threshold of 45:
+        rule engine saw  15 vs 45   -> badly failing -> high_risk
+        ML engine saw    75%        -> fine          -> safe
+        hybrid layer     safe vs high_risk           -> requires_review
+
+    Every assessment not marked out of 100 produced a guaranteed false
+    review. Normalising here makes both engines agree on what the number
+    MEANS, so any remaining disagreement is a real modelling difference
+    rather than an arithmetic one.
+
+    Attendance, tutorials and Moodle are seeded with max_score=100, so
+    this is a no-op for them - (value / 100) * 100 == value. Applying it
+    uniformly rather than special-casing assessments means any future
+    category gets correct behaviour for free instead of silently
+    inheriting the bug.
+    """
+    if value is None:
+        return None
+
+    # A zero or missing max_score would divide by zero. Passing the raw
+    # value through is the safer failure: it preserves the old behaviour
+    # rather than inventing a number.
+    if not criteria.max_score:
+        return value
+
+    return (value / criteria.max_score) * 100
+
+
 def build_criterion_inputs(
     db: Session, student_id: int, unit_id: int
 ) -> tuple[list[CriterionInput], list[str]]:
@@ -67,16 +112,20 @@ def build_criterion_inputs(
     missing_categories: list[str] = []
 
     for criteria in criteria_rows:
-        latest_value = get_latest_criterion_value(db, student_id, criteria.id)
+        raw_value = get_latest_criterion_value(db, student_id, criteria.id)
         category_label = criteria.category.value if criteria.category else criteria.name
 
-        if latest_value is None:
+        if raw_value is None:
             missing_categories.append(category_label)
 
+        # Normalised BEFORE it reaches the engine, so `actual` and
+        # `threshold` are always on the same 0-100 scale - and so this
+        # engine and the ML engine read the same row the same way.
+        # See normalise_to_percentage() for the bug this prevents.
         inputs.append(
             CriterionInput(
                 category=category_label,
-                actual=latest_value,
+                actual=normalise_to_percentage(raw_value, criteria),
                 threshold=criteria.threshold,
                 weight=criteria.weight,
             )

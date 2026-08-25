@@ -253,7 +253,13 @@ def manual_ingest(
     _require_assigned_lecturer(unit, current_user)
 
     try:
-        events, errors, warnings = ingestion_service.process_manual_entry(
+        (
+            events,
+            errors,
+            warnings,
+            student_created,
+            enrollment_created
+        ) = ingestion_service.process_manual_entry(
             db=db,
             unit_id=unit_id,
             lecturer_id=current_user.id,
@@ -286,4 +292,6 @@ def manual_ingest(
         errors=[IngestionRowError(**e) for e in errors],
         warnings=[IngestionRowWarning(**w) for w in warnings],
         analysis_result=analysis_result,
+        student_created=student_created,
+        enrollment_created=enrollment_created,
     )

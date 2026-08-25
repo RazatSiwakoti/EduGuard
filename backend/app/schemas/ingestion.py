@@ -113,3 +113,5 @@ class ManualEntryResult(BaseModel):
     errors: list[IngestionRowError]
     warnings: list[IngestionRowWarning]
     analysis_result: Optional[StudentAnalysisResult] = None
+    student_created: bool = False
+    enrollment_created: bool = False

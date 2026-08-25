@@ -372,9 +372,9 @@ def process_manual_entry(
     db: Session, unit_id: int, lecturer_id: int, student_number: str,
     name: Optional[str], email: Optional[str], program: Optional[str],
     gender: Optional[str], age: Optional[int],
-    scores: dict[int, float],
+        scores: dict[int, float],
     weekly_scores: Optional[dict[int, list]] = None,
-) -> tuple[list[AssessmentEvent], list[dict], list[dict]]:
+) -> tuple[list[AssessmentEvent], list[dict], list[dict], bool, bool]:
     """
     Same validation path as bulk upload, minus the IngestionBatch -
     there's no file to group a single manual entry under, so batch_id
@@ -385,6 +385,16 @@ def process_manual_entry(
     aggregation logic as bulk upload - a lecturer typing 7 weekly
     values manually gets an identical percentage + trend calculation
     to a CSV column doing the same thing.
+
+    Returns (events, errors, warnings, student_created, enrollment_created).
+
+    The two booleans exist because resolve_or_create_* are deliberately
+    silent about which branch they took - reusing an existing student is
+    the CORRECT behaviour, not a warning-worthy event. But a caller
+    showing a lecturer "student added" when the student already existed
+    and was merely given new scores is telling them something false.
+    Only the caller knows whether that distinction matters, so the fact
+    is reported rather than acted on here.
     """
     weekly_scores = weekly_scores or {}
     all_criteria_ids = list(scores.keys()) + list(weekly_scores.keys())
@@ -393,15 +403,31 @@ def process_manual_entry(
     errors: list[dict] = []
     warnings: list[dict] = []
 
+    # Checked BEFORE resolve_or_create_* runs, since afterwards a
+    # created row and a pre-existing one are indistinguishable. Two
+    # cheap indexed lookups; deliberately not folded into the shared
+    # helpers, which bulk upload also calls on a per-row hot path.
+    student_existed = (
+        db.query(Student).filter(Student.student_number == student_number).first()
+        is not None
+    )
+
     try:
         student, warning = resolve_or_create_student(
             db, student_number, name, email, program, gender, age
         )
     except ValueError as e:
-        return [], [{"reason": str(e)}], []
+        return [], [{"reason": str(e)}], [], False, False
 
     if warning:
         warnings.append({"student_number": student_number, "message": warning})
+
+    enrollment_existed = (
+        db.query(Enrollment)
+        .filter(Enrollment.student_id == student.id, Enrollment.unit_id == unit_id)
+        .first()
+        is not None
+    )
 
     resolve_or_create_enrollment(db, student.id, unit_id)
 
@@ -440,4 +466,12 @@ def process_manual_entry(
         db.add(event)
         created_events.append(event)
 
-    return created_events, errors, warnings
+    return (
+        created_events,
+        errors,
+        warnings,
+        not student_existed,
+        not enrollment_existed,
+    )
+
+

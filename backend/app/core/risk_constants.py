@@ -6,7 +6,7 @@ silently drift out of sync with each other.
 """
 
 # Fixed, non-lecturer-editable thresholds
-FIXED_ATTENDANCE_THRESHOLD = 80.0   # percent
+FIXED_ATTENDANCE_THRESHOLD = 50.0   # percent
 FIXED_MOODLE_THRESHOLD = 10.0       # raw login count over the checkpoint
 
 # Fixed, non-lecturer-editable weights

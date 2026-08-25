@@ -89,6 +89,8 @@ def create_unit(payload: UnitCreate, db: Session = Depends(get_db)):
         unit_service.assign_lecturer(db, new_unit, payload.lecturer_id)
 
     db.add(new_unit)
+    db.flush()
+    unit_service.seed_default_criteria(db, new_unit)
     db.commit()
     db.refresh(new_unit)
     return new_unit

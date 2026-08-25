@@ -254,7 +254,7 @@ interface StatusPanelProps {
 /** One presentation for every "there is nothing to show" case. */
 function StatusPanel({ title, message, onRetry }: StatusPanelProps) {
   return (
-    <div className="flex min-h-[70vh] items-center justify-center px-4"">
+    <div className="flex min-h-[70vh] items-center justify-center px-4">
       <div className="w-full max-w-md rounded-lg border border-stone-200 bg-white p-8 text-center">
         <CircleAlert className="mx-auto h-8 w-8 text-stone-300" aria-hidden="true" />
         <h1 className="mt-3 text-base font-semibold text-stone-900">{title}</h1>

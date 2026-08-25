@@ -1,7 +1,6 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
-import UnitsPage from "./pages/UnitsPage";
 import StudentsPage from "./pages/StudentsPage";
 import AlertsPage from "./pages/AlertsPage";
 import ReportsPage from "./pages/ReportsPage";
@@ -11,6 +10,12 @@ import AccountPage from "./pages/AccountPage";
 import SettingsPage from "./pages/SettingsPage";
 import ProtectedRoute from "./components/ProtectedRoute";
 import RoleRoute from "./components/RoleRoute";
+import UnitsPage from "./pages/UnitsPage";
+import UnitWorkspace from "./pages/UnitWorkspace";
+import UnitOverviewTab from "./pages/unit/UnitOverviewTab";
+import UnitImportTab from "./pages/unit/UnitImportTab";
+import UnitAddStudentTab from "./pages/unit/UnitAddStudentTab";
+
 
 /**
  * Route table.
@@ -44,6 +49,19 @@ function App() {
             item is a dead link. */}
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/units" element={<UnitsPage />} />
+
+        {/* One unit's workspace. UnitWorkspace is itself a layout: it resolves the unit, renders the header and tab bar, and the active tab appears through its own <Outlet />.
+
+            Tabs are routes rather than useState so the back button
+            steps between them, each is bookmarkable, and a refresh
+            keeps your place — which matters most for the multi-step
+            import wizard landing here next. */}
+        <Route path="/units/:unitId" element={<UnitWorkspace />}>
+          <Route index element={<UnitOverviewTab />} />
+          <Route path="import" element={<UnitImportTab />} />
+          <Route path="add-student" element={<UnitAddStudentTab />} />
+        </Route>
+
         <Route path="/students" element={<StudentsPage />} />
         <Route path="/alerts" element={<AlertsPage />} />
         <Route path="/reports" element={<ReportsPage />} />

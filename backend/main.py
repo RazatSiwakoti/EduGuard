@@ -14,6 +14,7 @@ from app.database import get_db
 from app.api.routes import risk
 from app.api.routes.auth import router as auth_router
 from app.api.routes.super_admin import router as super_admin_router
+from app.api.routes.lecturer import router as lecturer_router
 from app.api.routes.admin import router as admin_router
 from app.api.routes.units import router as units_router
 from app.api.routes.ingestion import router as ingestion_router
@@ -48,6 +49,7 @@ app.include_router(ingestion_router)
 app.include_router(criteria_router)
 app.include_router(risk.router)
 app.include_router(risk.unit_router)
+app.include_router(lecturer_router)
 
 
 @app.get("/")

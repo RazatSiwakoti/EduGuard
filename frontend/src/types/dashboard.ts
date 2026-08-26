@@ -1,17 +1,8 @@
-/**
- * Types for the lecturer analytics dashboard (Phase 6.2).
- *
- * These mirror app/schemas/dashboard.py on the backend exactly. If a
- * field changes there, it must change here too — there is no codegen
- * step in this project, so the two files are kept in sync by hand.
- */
-
 /** The three tiers the risk engines can actually produce. */
 export type RiskTier = "safe" | "low_risk" | "high_risk";
 
 /**
- * What a student is bucketed into on the dashboard. Wider than RiskTier
- * because two states exist that are NOT engine outputs:
+ * What a student is bucketed into on the dashboard. Wider than RiskTier because two states exist that are NOT engine outputs:
  *
  *  - "needs_review": the rule engine and the ML model disagreed badly
  *    (safe vs high_risk), so the hybrid engine deliberately refused to
@@ -23,7 +14,13 @@ export type RiskTier = "safe" | "low_risk" | "high_risk";
  * cohort has unresolved cases, not see them quietly vanish from a chart.
  */
 export type RiskBucket = RiskTier | "needs_review" | "not_analysed";
-
+export interface DashboardUnitCriterion {
+  id: number;
+  name: string;
+  category: string | null; // "attendance" | "weekly_tut" | "assessment" | "moodle"
+  threshold: number;
+  max_score: number;
+}
 /** One unit the logged-in lecturer is assigned to. */
 export interface DashboardUnit {
   id: number;
@@ -33,6 +30,7 @@ export interface DashboardUnit {
   teaching_period: string | null;
   level: string | null;
   enrolled_count: number;
+  criteria: DashboardUnitCriterion[];
 }
 
 /**

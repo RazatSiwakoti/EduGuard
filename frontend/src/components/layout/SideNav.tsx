@@ -46,7 +46,6 @@ const NAV_ITEMS: NavItem[] = [
     label: "Students",
     icon: Users,
     roles: ["lecturer"],
-    comingSoon: true,
   },
   {
     to: "/alerts",

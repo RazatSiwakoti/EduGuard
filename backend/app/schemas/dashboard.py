@@ -118,3 +118,43 @@ class LecturerDashboardResponse(BaseModel):
     # Echoed back so the UI can label charts honestly ("Week 8 checkpoint")
     # instead of hardcoding a number the backend might later change.
     checkpoint_week: int
+
+class DashboardUnitCriterion(BaseModel):
+    """
+    A criterion as CONFIGURED on a unit, independent of whether any
+    student has data for it.
+
+    This exists because DashboardStudent.criteria only ever carries
+    criteria a student actually has an AssessmentEvent for - a
+    deliberate choice, since a missing mark and a mark of zero mean
+    very different things. The side effect is that the frontend can
+    count how many assessments a student HAS been marked for, but has
+    no way to know how many the unit defines. Two marks out of what?
+
+    Sending the unit's own criteria answers that, and answers it per
+    unit: one unit may run three assessments and another just one.
+    """
+
+    id: int
+    name: str
+    category: Optional[str] = None
+    threshold: float
+    max_score: float
+
+
+class DashboardUnit(BaseModel):
+    """One unit the requesting lecturer is assigned to. Populates the
+    unit filter dropdown and the 'Risk by Unit' chart's axis."""
+
+    id: int
+    unit_code: str
+    unit_name: str
+    year: Optional[int] = None
+    teaching_period: Optional[str] = None
+    level: Optional[str] = None
+    enrolled_count: int
+
+    # Empty on GET /lecturer/units, which exists precisely to stay
+    # lightweight. Only the dashboard payload populates it, because
+    # only the students table needs the denominator.
+    criteria: list[DashboardUnitCriterion] = []

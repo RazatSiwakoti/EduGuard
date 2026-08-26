@@ -116,8 +116,7 @@ def main() -> None:
         db.commit()
         print(f"\nDone. Repaired {len(needs_repair)} unit(s).")
         print(
-            "Now re-run the analysis for each repaired unit so its students "
-            "are rescored against the criteria that finally exist:\n"
+            "Now re-run the analysis for each repaired unit so its students are rescored against the criteria that finally exist:\n"
             "  POST /units/{unit_id}/risk/run-analysis"
         )
 

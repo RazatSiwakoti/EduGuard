@@ -41,6 +41,7 @@ from app.models.final_verdicts import FinalVerdict
 from app.models.risk_score import RiskScore
 from app.models.student import Student
 from app.models.unit import Unit
+from typing import Optional
 
 
 # Matches the default used by the risk routes and run-analysis. Kept as a
@@ -64,11 +65,21 @@ def _fetch_units(db: Session, lecturer_id: int) -> list[Unit]:
     return list(db.execute(stmt).scalars().all())
 
 
-def _unit_to_dict(unit: Unit) -> dict:
+def _unit_to_dict(unit: Unit, criteria: Optional[list[Criteria]] = None) -> dict:
     """
     One place that decides what a unit looks like over the wire, so the
     dashboard payload and the standalone units list can never describe
     the same unit differently.
+
+    `criteria` is OPTIONAL and defaults to empty on purpose. The whole
+    reason GET /lecturer/units exists is that it stays cheap - the units
+    page, the unit switcher and the import wizard all want unit codes
+    and nothing else. Only get_lecturer_dashboard() passes criteria in,
+    because only the students table needs to know how many assessments
+    a unit defines in order to render "2 of 3 marked".
+
+    The rows are already loaded by _fetch_criteria_by_unit() for the
+    criteria chart, so this adds no extra query.
     """
     return {
         "id": unit.id,
@@ -78,6 +89,19 @@ def _unit_to_dict(unit: Unit) -> dict:
         "teaching_period": unit.teaching_period,
         "level": unit.level,
         "enrolled_count": unit.enrolled_count,
+        "criteria": [
+            {
+                "id": criterion.id,
+                "name": criterion.name,
+                # .value because category is a CriteriaCategory enum and
+                # is nullable on older rows - same guard the student
+                # criteria payload uses.
+                "category": criterion.category.value if criterion.category else None,
+                "threshold": criterion.threshold,
+                "max_score": criterion.max_score,
+            }
+            for criterion in (criteria or [])
+        ],
     }
 
 
@@ -333,7 +357,7 @@ def get_lecturer_dashboard(
     return {
         # Same helper GET /lecturer/units uses, so both endpoints always
         # describe a unit identically.
-        "units": [_unit_to_dict(u) for u in units],
+        "units": [_unit_to_dict(u, criteria_by_unit.get(u.id, [])) for u in units],
         "students": students_payload,
         "checkpoint_week": checkpoint_week,
     }

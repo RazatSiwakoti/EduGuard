@@ -13,7 +13,7 @@ the dashboard can never accidentally trigger a recompute just by being
 opened or refreshed.
 """
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import require_role
@@ -25,6 +25,18 @@ from app.services.dashboard_service import (
     DEFAULT_CHECKPOINT_WEEK,
     get_lecturer_dashboard,
     list_lecturer_units,
+)
+from app.schemas.student_detail import (
+    StudentDetailResponse,
+    StudentNoteDetail,
+    StudentNoteUpdate,
+    StudentReviewSubmit,
+)
+
+from app.services.student_detail_service import (
+    get_student_detail,
+    save_student_note,
+    submit_student_review,
 )
 
 router = APIRouter(
@@ -81,3 +93,129 @@ def read_lecturer_units(
     since it already carries exactly these fields.
     """
     return list_lecturer_units(db, current_user.id)
+
+@router.get("/students/{student_id}", response_model=StudentDetailResponse)
+def read_student_detail(
+    student_id: int = Path(..., ge=1),
+    unit_id: int = Query(
+        ...,
+        ge=1,
+        description="Which unit's picture to return. REQUIRED, not optional: "
+        "risk is computed per unit, so a student enrolled in two units has "
+        "two different verdicts and there is no such thing as their overall "
+        "risk. Omitting it would force this endpoint to invent one.",
+    ),
+    checkpoint_week: int = Query(default=DEFAULT_CHECKPOINT_WEEK, ge=1, le=52),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.LECTURER)),
+):
+    """
+    Everything the student card renders, in one request.
+
+    Both path and query parameters are attacker-controlled, so ownership
+    is re-checked in SQL: the unit must belong to `current_user` and the
+    student must be enrolled in it. Either failure returns 404 rather
+    than 403 - a 403 would confirm that someone else's unit exists.
+
+    Returns criteria the student has NO data for as well, with a null
+    score. That is the whole difference from the dashboard payload, and
+    it is what lets the card distinguish "not marked" from "scored zero".
+    """
+    detail = get_student_detail(
+        db, current_user.id, student_id, unit_id, checkpoint_week
+    )
+
+    if detail is None:
+        raise HTTPException(
+            status_code=404,
+            detail="No such student in a unit you teach.",
+        )
+
+    return detail
+
+
+@router.put("/students/{student_id}/note", response_model=StudentNoteDetail)
+def update_student_note(
+    payload: StudentNoteUpdate,
+    student_id: int = Path(..., ge=1),
+    unit_id: int = Query(..., ge=1),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.LECTURER)),
+):
+    """
+    Saves the requesting lecturer's own notes about this student.
+
+    The ONLY write on this router, which is otherwise read-only by
+    design. It is safe here because it cannot touch risk data: notes
+    live in their own table and no engine reads them. Opening or
+    refreshing the card still cannot trigger a recompute.
+
+    PUT rather than POST because it is idempotent - one note per
+    lecturer per student per unit, replaced wholesale on each save.
+
+    Notes deliberately do NOT live on FinalVerdict. That table is
+    append-only, so a note attached to one verdict would silently vanish
+    the next time the analysis was run.
+    """
+    note = save_student_note(
+        db, current_user.id, student_id, unit_id, payload.body
+    )
+
+    if note is None:
+        raise HTTPException(
+            status_code=404,
+            detail="No such student in a unit you teach.",
+        )
+
+    return note
+
+
+@router.post("/students/{student_id}/review", response_model=StudentDetailResponse)
+def review_student_verdict(
+    payload: StudentReviewSubmit,
+    student_id: int = Path(..., ge=1),
+    unit_id: int = Query(..., ge=1),
+    checkpoint_week: int = Query(default=DEFAULT_CHECKPOINT_WEEK, ge=1, le=52),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.LECTURER)),
+):
+    """
+    Records this lecturer's decision on an engine disagreement.
+
+    TAKES NO VERDICT ID. The verdict is resolved server-side from
+    (student, unit, checkpoint), because the id the browser is holding
+    can be stale: a lecturer opens the card, a colleague clicks "Run
+    Analysis", and the id in the page now points at a superseded row.
+    Writing a decision there would stamp it onto a verdict nothing
+    reads, and the student would stay in the queue with no explanation.
+
+    POST rather than PATCH because this is not an edit. Reviews are
+    append-only: submitting again records a NEW decision that supersedes
+    the last, which is how a misclick gets corrected while the fact that
+    it happened stays on record.
+
+    Returns the full refreshed card payload rather than a bare
+    confirmation, so the client re-renders the resolved tier, the new
+    history entry and the cleared review prompt from one round trip.
+    """
+    try:
+        detail = submit_student_review(
+            db,
+            current_user.id,
+            student_id,
+            unit_id,
+            payload.decision,
+            payload.comment,
+            checkpoint_week,
+        )
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    if detail is None:
+        raise HTTPException(
+            status_code=404,
+            detail="No such student in a unit you teach.",
+        )
+
+    return detail

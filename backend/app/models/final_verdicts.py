@@ -42,6 +42,8 @@ class FinalVerdict(Base):
     reviewed_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     review_decision = Column(String, nullable=True)
     reviewed_at = Column(DateTime, nullable=True)
+    review_id = Column(Integer, ForeignKey("verdict_reviews.id"), nullable=True)
+
 
     created_at = Column(DateTime, server_default=func.now())
 
@@ -50,3 +52,4 @@ class FinalVerdict(Base):
     rule_score = relationship("RiskScore", foreign_keys=[rule_score_id])
     ml_score = relationship("RiskScore", foreign_keys=[ml_score_id])
     reviewer = relationship("User", foreign_keys=[reviewed_by])
+    review = relationship("VerdictReview", foreign_keys=[review_id])

@@ -20,6 +20,7 @@ from app.api.routes.units import router as units_router
 from app.api.routes.ingestion import router as ingestion_router
 from app.api.routes.criteria import router as criteria_router
 from fastapi.middleware.cors import CORSMiddleware
+from app.models.verdict_review import VerdictReview
 
 
 app = FastAPI(

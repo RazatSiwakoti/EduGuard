@@ -222,7 +222,10 @@ def review_verdict(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Verdict does not belong to this unit")
 
     try:
-        updated = submit_review_decision(db, verdict_id, current_user.id, payload.review_decision)
+        updated = submit_review_decision(
+            db, verdict_id, current_user.id, payload.review_decision, payload.comment
+        )
+        
         db.commit()
         db.refresh(updated)
     except ValueError as e:

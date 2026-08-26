@@ -138,16 +138,25 @@ def build_assessment_event(
     student: Student, unit_id: int, criteria: Criteria, score: float,
     source: EventSource, created_by: int, batch_id: Optional[int] = None,
     trend_value: Optional[float] = None,
+    weekly_values: Optional[list] = None,
 ) -> AssessmentEvent:
     """Stages one immutable raw data point. Never call this to 'fix' an
-    existing row - always creates a new one. trend_value is only ever
-    set for Attendance/Weekly Tut events; None for everything else."""
+    existing row - always creates a new one. trend_value and
+    weekly_values are only ever set for Attendance/Weekly Tut events;
+    None for everything else.
+
+    weekly_values carries the NORMALISED cells the score was aggregated
+    from, so the per-week detail survives instead of being thrown away
+    (Phase 7.6b). It stays on this row, which means a corrected event
+    carries its own weekly list and the old one is superseded rather
+    than mutated - the same immutability every other field here has."""
     return AssessmentEvent(
         student_id=student.id,
         unit_id=unit_id,
         criteria_id=criteria.id,
         score=score,
         trend_value=trend_value,
+        weekly_values=weekly_values,
         source=source,
         created_by=created_by,
         batch_id=batch_id,
@@ -198,8 +207,12 @@ def build_weekly_criterion_event(
     Aggregates a student's raw weekly cells (Attendance or Weekly Tut)
     into ONE completion percentage AND one trend value, using the exact
     same functions the rule engine and ML training notebook use, then
-    stages both on one AssessmentEvent row. Raw weekly values are NOT
-    persisted separately - only score and trend_value.
+    stages both on one AssessmentEvent row.
+
+    Since Phase 7.6b the NORMALISED weekly cells are also stored on that
+    row (weekly_values), so the student card can draw a real week-by-week
+    chart. The aggregate remains what every engine reads - nothing about
+    scoring changed, this is an additional record of the input.
 
     Used identically by bulk upload (values from CSV columns) and
     manual entry (values typed directly) - same function, same result,
@@ -216,17 +229,30 @@ def build_weekly_criterion_event(
         weekly_bools = [parse_attendance_cell(v) for v in weekly_raw_values]
         score = calculate_attendance_pct(weekly_bools)
         trend = calculate_attendance_trend(weekly_bools)
+        # The NORMALISED cells, not the raw ones. "Y", "yes" and "1" all
+        # mean the same thing to the engines, so storing the parsed form
+        # keeps the chart consistent no matter how the file was written.
+        normalised = weekly_bools
     elif criteria.category == CriteriaCategory.WEEKLY_TUT:
         weekly_statuses = [parse_tutorial_cell(v) for v in weekly_raw_values]
         score = calculate_tutorial_completion_pct(weekly_statuses)
         trend = calculate_tutorial_completion_trend(weekly_statuses)
+        normalised = weekly_statuses
     else:
         raise ValueError(
             f"build_weekly_criterion_event called with unsupported category: {criteria.category}"
         )
 
     return build_assessment_event(
-        student, unit_id, criteria, score, source, created_by, batch_id, trend_value=trend
+        student,
+        unit_id,
+        criteria,
+        score,
+        source,
+        created_by,
+        batch_id,
+        trend_value=trend,
+        weekly_values=normalised,
     )
 
 

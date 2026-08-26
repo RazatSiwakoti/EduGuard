@@ -6,6 +6,7 @@ Defines Student and other entities
 from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, Text
 from datetime import datetime
 from database import Base
+from config import get_current_time
 
 
 class Student(Base):
@@ -28,7 +29,7 @@ class Student(Base):
     
     # Academic information
     program = Column(String(255), nullable=True)  # e.g., "ICT724"
-    enrollment_date = Column(DateTime, default=datetime.utcnow)
+    enrollment_date = Column(DateTime, default=get_current_time)
     
     # Academic metrics
     attendance_rate = Column(Float, default=0.0)  # 0-100%
@@ -49,8 +50,8 @@ class Student(Base):
     
     # Status
     is_active = Column(Boolean, default=True)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=get_current_time, onupdate=get_current_time)
+    created_at = Column(DateTime, default=get_current_time)
 
     def __repr__(self):
         return f"<Student {self.student_number}: {self.first_name} {self.last_name} - {self.risk_status}>"
@@ -76,14 +77,15 @@ class EmailLog(Base):
     email_type = Column(String(50), nullable=False)  # "Risk Alert", "Bulk Alert", etc.
     template = Column(String(100), nullable=False)  # "at_risk_alert_week4", etc.
     status = Column(String(20), default="Pending")  # "Sent", "Failed", "Opened", "Pending"
-    sent_at = Column(DateTime, default=datetime.utcnow)
+    sent_at = Column(DateTime, default=get_current_time)
     opened_at = Column(DateTime, nullable=True)
+    acknowledged_at = Column(DateTime, nullable=True)
     retry_count = Column(Integer, default=0)
     error_message = Column(Text, nullable=True)
     week = Column(Integer, nullable=True)  # Which week was this sent
     
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=get_current_time)
+    updated_at = Column(DateTime, default=get_current_time, onupdate=get_current_time)
 
     def __repr__(self):
         return f"<EmailLog {self.student_id}: {self.status}>"

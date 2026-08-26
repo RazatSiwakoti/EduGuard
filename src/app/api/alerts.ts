@@ -4,12 +4,17 @@ export interface EmailLog {
   id: string;
   student: string;
   studentId: string;
+  email?: string;
   subject: string;
   type: string;
   template: string;
-  status: "Opened" | "Sent" | "Failed";
+  status: "Acknowledged" | "Sent" | "Failed" | "Pending" | "Opened";
   sentAt: string;
-  openedAt: string;
+  openedAt?: string;
+  acknowledgedAt?: string;
+  rawSentAt?: string | null;
+  rawAcknowledgedAt?: string | null;
+  errorMessage?: string | null;
 }
 
 export interface AlertStudent {
@@ -24,9 +29,10 @@ export interface AlertStudent {
 
 export interface AlertStats {
   total: number;
-  opened: number;
+  acknowledged: number;
   sent: number;
   failed: number;
+  opened?: number;
 }
 
 export interface BulkSendResponse {

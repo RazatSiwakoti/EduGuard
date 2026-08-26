@@ -21,9 +21,10 @@ class Settings:
     API_PREFIX = "/api"
     
     # Database
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
     DATABASE_URL = os.getenv(
         "DATABASE_URL",
-        "sqlite:///./test.db"
+        f"sqlite:///{os.path.join(BASE_DIR, 'test.db')}"
     )
     
     # Frontend CORS
@@ -49,9 +50,22 @@ class Settings:
     MODEL_PATH = os.getenv("MODEL_PATH", "models/risk_model.pkl")
     RISK_THRESHOLD = float(os.getenv("RISK_THRESHOLD", "0.5"))
     
-    # Scheduler
+    # Scheduler & Timezone
     CHECKPOINT_WEEK = int(os.getenv("CHECKPOINT_WEEK", "4"))
-    SCHEDULER_TIMEZONE = os.getenv("SCHEDULER_TIMEZONE", "UTC")
+    TIMEZONE = os.getenv("TIMEZONE", "Australia/Sydney")
+    SCHEDULER_TIMEZONE = os.getenv("SCHEDULER_TIMEZONE", "Australia/Sydney")
 
 
 settings = Settings()
+
+
+def get_current_time():
+    """Return the current local datetime according to configured TIMEZONE (defaults to Australia/Sydney)"""
+    try:
+        from zoneinfo import ZoneInfo
+        from datetime import datetime
+        tz = ZoneInfo(settings.TIMEZONE)
+        return datetime.now(tz).replace(tzinfo=None)
+    except Exception:
+        from datetime import datetime
+        return datetime.now()

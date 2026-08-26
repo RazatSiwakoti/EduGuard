@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
-import { AlertTriangle, Mail, CheckCircle, XCircle, Clock, RefreshCw, Filter, Search, Loader } from "lucide-react";
+import { AlertTriangle, Mail, CheckCircle, XCircle, Clock, RefreshCw, Filter, Search, Loader, HelpCircle, ExternalLink, Download } from "lucide-react";
 import { useTheme } from "../context/ThemeContext";
+import { downloadCSV } from "../utils/csvExport";
 import {
   fetchEmailLogs,
   fetchAlertQueue,
@@ -14,9 +15,11 @@ import {
 } from "../api/alerts";
 
 const statusConfig = {
-  Opened: { color: "#16A34A", bg: "#ECFDF5", icon: <CheckCircle size={12} color="#16A34A" /> },
-  Sent: { color: "#185FA5", bg: "#EBF4FF", icon: <Mail size={12} color="#185FA5" /> },
-  Failed: { color: "#E24B4A", bg: "#FEE2E2", icon: <XCircle size={12} color="#E24B4A" /> },
+  Acknowledged: { color: "#16A34A", bg: "#ECFDF5", label: "Acknowledged", icon: <CheckCircle size={12} color="#16A34A" /> },
+  Opened: { color: "#16A34A", bg: "#ECFDF5", label: "Acknowledged", icon: <CheckCircle size={12} color="#16A34A" /> },
+  Sent: { color: "#185FA5", bg: "#EBF4FF", label: "Awaiting Student Action", icon: <Clock size={12} color="#185FA5" /> },
+  Pending: { color: "#6B7280", bg: "#F3F4F6", label: "Pending", icon: <Clock size={12} color="#6B7280" /> },
+  Failed: { color: "#E24B4A", bg: "#FEE2E2", label: "Delivery Failed", icon: <XCircle size={12} color="#E24B4A" /> },
 };
 
 const riskConfig = {
@@ -24,6 +27,31 @@ const riskConfig = {
   MEDIUM: { color: "#D97706", bg: "#FEF3C7", label: "Medium Risk" },
   LOW: { color: "#16A34A", bg: "#ECFDF5", label: "Low Risk" },
 };
+
+function formatTimeAgo(dateStr?: string | null): string {
+  if (!dateStr || dateStr === "—") return "—";
+  try {
+    const d = new Date(dateStr.replace(" ", "T"));
+    if (isNaN(d.getTime())) return dateStr;
+    const diffMs = Date.now() - d.getTime();
+    if (diffMs < 0) return "Just now";
+    const diffMins = Math.floor(diffMs / (1000 * 60));
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffDays > 0) {
+      return `${diffDays}d ago`;
+    } else if (diffHours > 0) {
+      return `${diffHours}h ago`;
+    } else if (diffMins > 0) {
+      return `${diffMins}m ago`;
+    } else {
+      return "Just now";
+    }
+  } catch {
+    return dateStr;
+  }
+}
 
 export default function AlertsPage() {
   const [search, setSearch] = useState("");
@@ -34,7 +62,7 @@ export default function AlertsPage() {
   // Data states
   const [emailLogs, setEmailLogs] = useState<EmailLog[]>([]);
   const [alertQueue, setAlertQueue] = useState<AlertStudent[]>([]);
-  const [stats, setStats] = useState<AlertStats>({ total: 0, opened: 0, sent: 0, failed: 0 });
+  const [stats, setStats] = useState<AlertStats>({ total: 0, acknowledged: 0, sent: 0, failed: 0 });
 
   const { isDark } = useTheme();
   const textPrimary = isDark ? "#F1F5F9" : "#1A1A2E";
@@ -68,8 +96,19 @@ export default function AlertsPage() {
   const filteredLogs = emailLogs.filter((log) => {
     const matchSearch =
       log.student.toLowerCase().includes(search.toLowerCase()) ||
-      log.subject.toLowerCase().includes(search.toLowerCase());
-    const matchStatus = statusFilter === "All" || log.status === statusFilter;
+      (log.email && log.email.toLowerCase().includes(search.toLowerCase())) ||
+      log.subject.toLowerCase().includes(search.toLowerCase()) ||
+      (log.errorMessage && log.errorMessage.toLowerCase().includes(search.toLowerCase()));
+
+    let matchStatus = true;
+    if (statusFilter === "Acknowledged") {
+      matchStatus = log.status === "Acknowledged" || log.status === "Opened";
+    } else if (statusFilter === "Sent") {
+      matchStatus = log.status === "Sent" || log.status === "Pending";
+    } else if (statusFilter === "Failed") {
+      matchStatus = log.status === "Failed";
+    }
+
     return matchSearch && matchStatus;
   });
 
@@ -84,11 +123,9 @@ export default function AlertsPage() {
       if (result.success) {
         toast.success("Bulk alerts dispatched", {
           id: toastId,
-          description: `${result.sent_count} high-risk + medium-risk emails sent via EduGuard SMTP.`,
+          description: `${result.sent_count} emails sent. ${result.failed_count > 0 ? `${result.failed_count} failed delivery.` : ""}`,
           duration: 5000,
         });
-
-        // Reload data
         await loadData();
       } else {
         toast.error("Failed to send bulk alerts", {
@@ -115,22 +152,62 @@ export default function AlertsPage() {
       if (result.success) {
         toast.success(`Alert sent to ${studentName}`, {
           id: toastId,
-          description: `Email dispatched to ${studentEmail}`,
+          description: `Dispatched to ${studentEmail}`,
           duration: 3000,
         });
-
-        // Reload data
         await loadData();
       } else {
         toast.error("Failed to send alert", {
           id: toastId,
           description: result.message,
-          duration: 3000,
+          duration: 4000,
         });
+        await loadData();
       }
     } catch (error) {
       console.error("Error sending alert:", error);
       toast.error("Error sending alert", { id: toastId });
+    }
+  };
+
+  const handleExportCSV = () => {
+    try {
+      const headers = [
+        "Log ID",
+        "Student Name",
+        "Student ID",
+        "Recipient Email",
+        "Subject / Course",
+        "Notice Type",
+        "Template",
+        "Delivery Status",
+        "Sent At (AEST)",
+        "Acknowledged At (AEST)",
+        "Error / Diagnostic Message",
+      ];
+
+      const rows = filteredLogs.map((l) => [
+        l.id,
+        l.student,
+        l.studentId,
+        l.email || "—",
+        l.subject,
+        l.type,
+        l.template,
+        l.status,
+        l.sentAt,
+        l.acknowledgedAt || l.openedAt || "—",
+        l.errorMessage || "None",
+      ]);
+
+      downloadCSV("EduGuard_Email_Alerts_Log_2026", headers, rows);
+      toast.success("Alert Logs Downloaded", {
+        description: `Exported ${rows.length} notification records as CSV.`,
+        duration: 3000,
+      });
+    } catch (error) {
+      console.error("Error exporting CSV:", error);
+      toast.error("Failed to export alert logs");
     }
   };
 
@@ -142,6 +219,8 @@ export default function AlertsPage() {
     );
   }
 
+  const acknowledgedCount = stats.acknowledged ?? stats.opened ?? 0;
+
   return (
     <div style={{ animation: "fadeInUp 0.25s ease" }}>
       {/* Header */}
@@ -150,11 +229,11 @@ export default function AlertsPage() {
           <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "4px" }}>
             <AlertTriangle size={20} color="#E24B4A" />
             <h1 style={{ color: textPrimary, fontSize: "22px", fontWeight: "800", margin: 0, letterSpacing: "-0.02em" }}>
-              Alerts & Email Notifications
+              Alerts & Student Acknowledgment
             </h1>
           </div>
           <p style={{ color: textSecondary, fontSize: "13px", margin: 0 }}>
-            SMTP notification log · Semester 1 2025 · {stats.total} emails sent this term
+            SMTP Notification Engine · Australian Eastern Time (AEST) · {stats.total} total notices dispatched
           </p>
         </div>
         <button
@@ -188,28 +267,28 @@ export default function AlertsPage() {
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "14px", marginBottom: "20px" }}>
         {[
           {
-            label: "Total Sent",
+            label: "Total Dispatched",
             value: stats.total,
             color: "#185FA5",
             bg: "#EBF4FF",
             icon: <Mail size={18} color="#185FA5" />,
           },
           {
-            label: "Opened",
-            value: stats.opened,
+            label: "Student Acknowledged",
+            value: acknowledgedCount,
             color: "#16A34A",
             bg: "#ECFDF5",
             icon: <CheckCircle size={18} color="#16A34A" />,
           },
           {
-            label: "Awaiting Read",
+            label: "Awaiting Student Action",
             value: stats.sent,
             color: "#D97706",
             bg: "#FEF3C7",
             icon: <Clock size={18} color="#D97706" />,
           },
           {
-            label: "Failed",
+            label: "Delivery Failed / Bad Email",
             value: stats.failed,
             color: "#E24B4A",
             bg: "#FEE2E2",
@@ -325,7 +404,7 @@ export default function AlertsPage() {
         <div style={{ padding: "16px 20px", borderBottom: "1px solid #F3F4F6", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
             <Mail size={15} color="#185FA5" />
-            <h2 style={{ color: "#1A1A2E", fontSize: "14px", fontWeight: "700", margin: 0 }}>Email Notification Log</h2>
+            <h2 style={{ color: "#1A1A2E", fontSize: "14px", fontWeight: "700", margin: 0 }}>Email Notification & Acknowledgment Log</h2>
             <span style={{ background: "#EBF4FF", color: "#185FA5", fontSize: "11px", fontWeight: "700", padding: "2px 8px", borderRadius: "999px" }}>
               {filteredLogs.length} records
             </span>
@@ -335,10 +414,10 @@ export default function AlertsPage() {
               <Search size={12} color="#9CA3AF" style={{ position: "absolute", left: "10px", top: "50%", transform: "translateY(-50%)" }} />
               <input
                 type="text"
-                placeholder="Search…"
+                placeholder="Search student, email, reason…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                style={{ padding: "6px 10px 6px 28px", border: "1.5px solid #E5E7EB", borderRadius: "7px", fontSize: "12px", outline: "none", width: "180px" }}
+                style={{ padding: "6px 10px 6px 28px", border: "1.5px solid #E5E7EB", borderRadius: "7px", fontSize: "12px", outline: "none", width: "220px" }}
               />
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
@@ -348,21 +427,51 @@ export default function AlertsPage() {
                 onChange={(e) => setStatusFilter(e.target.value)}
                 style={{ padding: "6px 10px", border: "1.5px solid #E5E7EB", borderRadius: "7px", fontSize: "12px", outline: "none", cursor: "pointer" }}
               >
-                {["All", "Opened", "Sent", "Failed"].map((s) => (
-                  <option key={s}>{s}</option>
-                ))}
+                <option value="All">All Statuses</option>
+                <option value="Acknowledged">Acknowledged</option>
+                <option value="Sent">Awaiting Action</option>
+                <option value="Failed">Delivery Failed</option>
               </select>
             </div>
+            <button
+              onClick={handleExportCSV}
+              title="Download filtered logs as CSV"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "5px",
+                padding: "6px 12px",
+                background: "#FFFFFF",
+                border: "1.5px solid #D1D5DB",
+                borderRadius: "7px",
+                color: "#374151",
+                fontSize: "12px",
+                fontWeight: "600",
+                cursor: "pointer",
+                transition: "all 0.15s ease",
+              }}
+              onMouseEnter={(e) => {
+                (e.currentTarget as HTMLButtonElement).style.borderColor = "#185FA5";
+                (e.currentTarget as HTMLButtonElement).style.color = "#185FA5";
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as HTMLButtonElement).style.borderColor = "#D1D5DB";
+                (e.currentTarget as HTMLButtonElement).style.color = "#374151";
+              }}
+            >
+              <Download size={13} />
+              Export CSV
+            </button>
           </div>
         </div>
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr style={{ background: "#F9FAFB" }}>
-              {["Student", "Subject", "Email Type", "Template", "Status", "Sent At", "Opened At"].map((col) => (
+              {["Student", "Unit", "Delivery Status", "Sent At (AEST)", "Student Acknowledgment", "Elapsed / Days Tracker"].map((col) => (
                 <th
                   key={col}
                   style={{
-                    padding: "10px 16px",
+                    padding: "11px 16px",
                     textAlign: "left",
                     color: "#6B7280",
                     fontSize: "11px",
@@ -380,44 +489,111 @@ export default function AlertsPage() {
           <tbody>
             {filteredLogs.length > 0 ? (
               filteredLogs.map((log, idx) => {
-                const sc = statusConfig[log.status as keyof typeof statusConfig];
+                const sc = statusConfig[log.status as keyof typeof statusConfig] || statusConfig.Pending;
+                const isAcked = log.status === "Acknowledged" || log.status === "Opened";
+                const isFailed = log.status === "Failed";
+                const timeAgo = formatTimeAgo(log.sentAt);
+
                 return (
                   <tr key={log.id} style={{ background: idx % 2 === 0 ? "#FFFFFF" : "#F9FAFB" }}>
+                    {/* Student */}
                     <td style={{ padding: "11px 16px", borderBottom: "1px solid #F3F4F6" }}>
                       <div style={{ color: "#1A1A2E", fontSize: "13px", fontWeight: "600" }}>{log.student}</div>
+                      <div style={{ color: "#6B7280", fontSize: "11px" }}>{log.email || "No email on record"}</div>
                       <div style={{ color: "#9CA3AF", fontSize: "10px" }}>{log.studentId}</div>
                     </td>
-                    <td style={{ padding: "11px 16px", borderBottom: "1px solid #F3F4F6", color: "#6B7280", fontSize: "12px" }}>{log.subject}</td>
-                    <td style={{ padding: "11px 16px", borderBottom: "1px solid #F3F4F6", color: "#374151", fontSize: "12px" }}>{log.type}</td>
-                    <td style={{ padding: "11px 16px", borderBottom: "1px solid #F3F4F6" }}>
-                      <code style={{ background: "#F3F4F6", color: "#6B7280", fontSize: "10px", padding: "2px 6px", borderRadius: "4px" }}>{log.template}</code>
+
+                    {/* Subject / Program */}
+                    <td style={{ padding: "11px 16px", borderBottom: "1px solid #F3F4F6", color: "#374151", fontSize: "12px", fontWeight: "500" }}>
+                      {log.subject}
                     </td>
+
+                    {/* Delivery Status */}
                     <td style={{ padding: "11px 16px", borderBottom: "1px solid #F3F4F6" }}>
-                      <span
-                        style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: "4px",
-                          padding: "3px 9px",
-                          borderRadius: "999px",
-                          background: sc.bg,
-                          color: sc.color,
-                          fontSize: "11px",
-                          fontWeight: "600",
-                        }}
-                      >
-                        {sc.icon} {log.status}
-                      </span>
+                      <div>
+                        <span
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "4px",
+                            padding: "3px 9px",
+                            borderRadius: "999px",
+                            background: sc.bg,
+                            color: sc.color,
+                            fontSize: "11px",
+                            fontWeight: "600",
+                          }}
+                        >
+                          {sc.icon} {isAcked ? "Acknowledged" : isFailed ? "Failed" : "Dispatched"}
+                        </span>
+                        {isFailed && log.errorMessage && (
+                          <div style={{ color: "#DC2626", fontSize: "10px", marginTop: "3px", maxWidth: "220px", lineHeight: "1.3" }}>
+                            ⚠️ {log.errorMessage}
+                          </div>
+                        )}
+                      </div>
                     </td>
-                    <td style={{ padding: "11px 16px", borderBottom: "1px solid #F3F4F6", color: "#6B7280", fontSize: "12px", whiteSpace: "nowrap" }}>{log.sentAt}</td>
-                    <td style={{ padding: "11px 16px", borderBottom: "1px solid #F3F4F6", color: "#6B7280", fontSize: "12px", whiteSpace: "nowrap" }}>{log.openedAt}</td>
+
+                    {/* Sent At */}
+                    <td style={{ padding: "11px 16px", borderBottom: "1px solid #F3F4F6", color: "#4B5563", fontSize: "12px", whiteSpace: "nowrap" }}>
+                      <div>{log.sentAt}</div>
+                      <div style={{ color: "#9CA3AF", fontSize: "10px" }}>{timeAgo}</div>
+                    </td>
+
+                    {/* Acknowledgment Details */}
+                    <td style={{ padding: "11px 16px", borderBottom: "1px solid #F3F4F6", fontSize: "12px", whiteSpace: "nowrap" }}>
+                      {isAcked ? (
+                        <div>
+                          <div style={{ color: "#16A34A", fontWeight: "600", display: "flex", alignItems: "center", gap: "4px" }}>
+                            <CheckCircle size={13} color="#16A34A" /> Confirmed by Student
+                          </div>
+                          <div style={{ color: "#6B7280", fontSize: "11px" }}>
+                            {log.acknowledgedAt || log.openedAt || log.sentAt}
+                          </div>
+                        </div>
+                      ) : isFailed ? (
+                        <span style={{ color: "#9CA3AF", fontSize: "11px" }}>— (Not delivered)</span>
+                      ) : (
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                          <span style={{ color: "#D97706", fontSize: "11px", fontWeight: "600", background: "#FEF3C7", padding: "2px 7px", borderRadius: "4px" }}>
+                            ⏳ Awaiting Click
+                          </span>
+                          <a
+                            href={`http://localhost:8000/alerts/acknowledge/${log.id}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            title="Test Student Acknowledgment Link"
+                            style={{ color: "#185FA5", display: "inline-flex", alignItems: "center", gap: "2px", fontSize: "10px", textDecoration: "none" }}
+                          >
+                            <ExternalLink size={11} /> Test Ack
+                          </a>
+                        </div>
+                      )}
+                    </td>
+
+                    {/* Elapsed / Days Tracker */}
+                    <td style={{ padding: "11px 16px", borderBottom: "1px solid #F3F4F6", whiteSpace: "nowrap" }}>
+                      {isAcked ? (
+                        <span style={{ background: "#ECFDF5", color: "#16A34A", padding: "3px 8px", borderRadius: "6px", fontSize: "11px", fontWeight: "600", display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                          🟢 Resolved ({timeAgo})
+                        </span>
+                      ) : isFailed ? (
+                        <span style={{ background: "#FEE2E2", color: "#DC2626", padding: "3px 8px", borderRadius: "6px", fontSize: "11px", fontWeight: "600", display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                          ❌ Undelivered
+                        </span>
+                      ) : (
+                        <span style={{ background: "#FEF3C7", color: "#D97706", padding: "3px 8px", borderRadius: "6px", fontSize: "11px", fontWeight: "600", display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                          ⏱️ {timeAgo} pending
+                        </span>
+                      )}
+                    </td>
                   </tr>
                 );
               })
             ) : (
               <tr>
-                <td colSpan={7} style={{ padding: "32px", textAlign: "center", color: "#9CA3AF" }}>
-                  No email logs found
+                <td colSpan={6} style={{ padding: "32px", textAlign: "center", color: "#9CA3AF" }}>
+                  No email logs matching the selected filter
                 </td>
               </tr>
             )}

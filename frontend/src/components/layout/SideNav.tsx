@@ -18,8 +18,6 @@ interface NavItem {
   icon: LucideIcon;
   /** Which roles see this item. Omitted = every signed-in role. */
   roles?: UserRole[];
-  /** Shows a muted "Soon" tag so a stub never looks like a broken link. */
-  comingSoon?: boolean;
 }
 
 /**
@@ -53,13 +51,9 @@ const NAV_ITEMS: NavItem[] = [
     icon: BellRing,
     roles: ["lecturer"],
   },
-  {
-    to: "/reports",
-    label: "Reports",
-    icon: FileBarChart,
-    roles: ["lecturer"],
-    comingSoon: true,
-  },
+  // Built in 7.9 / section C3 - the "Soon" tag goes with it, or the
+  // sidebar keeps advertising a stub that no longer exists.
+  { to: "/reports", label: "Reports", icon: FileBarChart, roles: ["lecturer"] },
   // Admin and super admin keep their existing single-page panels; they
   // appear here so those roles get a working sidebar too rather than an
   // empty rail.
@@ -127,12 +121,6 @@ export default function SideNav() {
             >
               <Icon className="h-4.5 w-4.5 shrink-0" aria-hidden="true" />
               <span className="hidden lg:inline">{item.label}</span>
-
-              {item.comingSoon && (
-                <span className="ml-auto hidden rounded bg-stone-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-stone-400 lg:inline">
-                  Soon
-                </span>
-              )}
             </NavLink>
           );
         })}

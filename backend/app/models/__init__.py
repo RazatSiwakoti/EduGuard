@@ -8,3 +8,6 @@ from app.models.assessment_event import AssessmentEvent
 from app.models.risk_score import RiskScore
 from app.models.ingestion_batch import IngestionBatch
 from app.models.final_verdicts import FinalVerdict
+from app.models.email_template import EmailTemplate
+from app.models.email_message import EmailMessage
+from app.models.verdict_review import VerdictReview

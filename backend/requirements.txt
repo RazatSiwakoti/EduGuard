@@ -12,3 +12,4 @@ pydantic-settings>=2.0
 python-dotenv>=1.0
 alembic>=1.13
 email-validator
+reportlab>=4.0

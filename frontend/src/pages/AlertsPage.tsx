@@ -1,23 +1,25 @@
-import { BellRing } from "lucide-react";
-import ComingSoon from "../components/layout/ComingSoon";
+import { useState } from "react";
+import { BellRing, Play } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import AlertLogTable from "../components/alerts/AlertLogTable";
+import AlertStatTiles from "../components/alerts/AlertStatTiles";
+import BulkSendDialog from "../components/alerts/BulkSendDialog";
+import PendingQueue from "../components/alerts/PendingQueue";
+import TemplateEditor from "../components/alerts/TemplateEditor";
+import { alertService } from "../services/alertService";
+import { useAlertLog, useAlertQueue, useAlertSummary, useDeleteTemplate, usePlaceholders, useRunSweep, useSaveTemplate, useSendAlert, useSendBulk, useTemplates } from "../hooks/useAlerts";
+import { EMPTY_DRAFT, queueKey, type TemplateDraft } from "../utils/alerts";
+import type { AlertStatus, QueueItem, SendResult } from "../types/alerts";
 
-/**
- * Placeholder — needs mail infrastructure that is not in the codebase
- * yet. The SMTP settings exist in .env.example, but no mail service
- * has been written.
- */
+function describe(result: SendResult): string { const parts: string[] = []; if (result.sent) parts.push(`${result.sent} sent`); if (result.queued && !result.sent) parts.push(`${result.queued} queued`); if (result.failed) parts.push(`${result.failed} failed`); const skipped = Object.values(result.skipped ?? {}).reduce((total, count) => total + count, 0); if (skipped) parts.push(`${skipped} skipped`); return parts.join(" · ") || "Nothing to send."; }
+
 export default function AlertsPage() {
-  return (
-    <ComingSoon
-      title="Alerts"
-      icon={BellRing}
-      description="Reach the students who need reaching, without leaving EduGuard."
-      planned={[
-        "Compose and send an email to one student, or to everyone in a risk tier",
-        "Reusable message templates for common interventions",
-        "A record of what was sent, to whom and when — so an intervention is auditable",
-        "Optional automatic notification when a student first crosses into high risk",
-      ]}
-    />
-  );
+  const summaryQuery = useAlertSummary(); const queueQuery = useAlertQueue(null); const templatesQuery = useTemplates(); const placeholdersQuery = usePlaceholders();
+  const [selected, setSelected] = useState<Set<string>>(new Set()); const [confirming, setConfirming] = useState(false); const [banner, setBanner] = useState<string | null>(null); const [sendingKey, setSendingKey] = useState<string | null>(null); const [status, setStatus] = useState<AlertStatus | null>(null); const [search, setSearch] = useState(""); const [page, setPage] = useState(1); const [templateId, setTemplateId] = useState<number | null>(null); const [draft, setDraft] = useState<TemplateDraft>(EMPTY_DRAFT); const [templateError, setTemplateError] = useState<string | null>(null); const [saved, setSaved] = useState(false);
+  const logQuery = useAlertLog({ status, search, page }); const sendOne = useSendAlert(); const sendBulk = useSendBulk(); const runSweep = useRunSweep(); const saveTemplate = useSaveTemplate(); const deleteTemplate = useDeleteTemplate();
+  const ready = queueQuery.data?.ready ?? []; const blocked = queueQuery.data?.blocked ?? []; const selectedItems = ready.filter((item) => selected.has(queueKey(item))); const previewTarget = selectedItems[0] ?? ready[0]; const previewQuery = useQuery({ queryKey: ["alert-preview", previewTarget?.student_id, previewTarget?.unit_id], queryFn: () => alertService.preview({ student_id: previewTarget!.student_id, unit_id: previewTarget!.unit_id }), enabled: !!previewTarget });
+  if (summaryQuery.isLoading) return <div className="p-8 text-stone-500">Loading alerts...</div>; if (summaryQuery.isError) return <div className="p-8 text-red-700">Could not load alerts.</div>; const summary = summaryQuery.data!;
+  function send(item: QueueItem) { setSendingKey(queueKey(item)); sendOne.mutate({ student_id: item.student_id, unit_id: item.unit_id }, { onSuccess: (result) => setBanner(`${item.name}: ${describe(result)}`), onError: () => setBanner("That alert could not be sent."), onSettled: () => setSendingKey(null) }); }
+  function selectTemplate(id: number | null) { const template = templatesQuery.data?.find((item) => item.id === id); setTemplateId(template?.is_system ? null : id); setTemplateError(null); setDraft(template ? { name: template.is_system ? `${template.name} (my copy)` : template.name, risk_tier: template.risk_tier, subject: template.subject, body: template.body } : EMPTY_DRAFT); }
+  return <div className="px-6 py-8"><div className="mx-auto max-w-6xl"><header className="mb-6 flex flex-wrap items-center justify-between gap-4"><h1 className="flex items-center gap-2 text-2xl font-semibold text-stone-900"><BellRing className="h-6 w-6" />Alerts &amp; email notifications</h1><div className="flex gap-2"><button type="button" onClick={() => runSweep.mutate(undefined, { onSuccess: (result) => setBanner(describe(result)) })} disabled={runSweep.isPending} className="inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-sm"><Play className="h-4 w-4" />Run sweep now</button><button type="button" onClick={() => setConfirming(true)} disabled={!selectedItems.length} className="rounded-xl bg-blue-600 px-4 py-2 text-sm text-white disabled:opacity-50">Send selected</button></div></header>{summary.dry_run && <p className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm">Dry run: messages are written to {summary.outbox_path}.</p>}{banner && <p className="mb-4 rounded-xl bg-stone-100 p-3 text-sm" aria-live="polite">{banner}</p>}<div className="mb-5"><AlertStatTiles counters={summary.counters} /></div><div className="space-y-5"><PendingQueue ready={ready} blocked={blocked} selected={selected} onToggle={(item) => setSelected((current) => { const next = new Set(current); const key = queueKey(item); next.has(key) ? next.delete(key) : next.add(key); return next; })} onToggleAll={() => setSelected(selected.size === ready.length ? new Set() : new Set(ready.map(queueKey)))} onSendOne={send} sendingKey={sendingKey} /><AlertLogTable data={logQuery.data} isLoading={logQuery.isLoading} status={status} onStatusChange={(value) => { setStatus(value); setPage(1); }} search={search} onSearchChange={(value) => { setSearch(value); setPage(1); }} page={page} onPageChange={setPage} /><TemplateEditor templates={templatesQuery.data ?? []} placeholders={placeholdersQuery.data ?? []} selectedId={templateId} onSelect={selectTemplate} draft={draft} onDraftChange={setDraft} onSave={() => { saveTemplate.mutate({ id: templateId, payload: draft }, { onSuccess: (template) => { setTemplateId(template.id); setSaved(true); }, onError: () => setTemplateError("That template could not be saved.") }); }} onDelete={() => templateId !== null && deleteTemplate.mutate(templateId, { onSuccess: () => selectTemplate(null) })} isSaving={saveTemplate.isPending} isDeleting={deleteTemplate.isPending} errorMessage={templateError} justSaved={saved} preview={previewQuery.data} previewStudentName={previewTarget?.name ?? null} /></div></div>{confirming && <BulkSendDialog recipients={selectedItems} preview={previewQuery.data} isPreviewLoading={previewQuery.isLoading} isSending={sendBulk.isPending} dryRun={summary.dry_run} onConfirm={() => sendBulk.mutate(selectedItems.map(({ student_id, unit_id }) => ({ student_id, unit_id })), { onSuccess: (result) => { setBanner(describe(result)); setSelected(new Set()); setConfirming(false); } })} onCancel={() => setConfirming(false)} />}</div>;
 }

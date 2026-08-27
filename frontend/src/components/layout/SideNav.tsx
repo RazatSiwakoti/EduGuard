@@ -52,7 +52,6 @@ const NAV_ITEMS: NavItem[] = [
     label: "Alerts",
     icon: BellRing,
     roles: ["lecturer"],
-    comingSoon: true,
   },
   {
     to: "/reports",

@@ -19,8 +19,12 @@ from app.api.routes.admin import router as admin_router
 from app.api.routes.units import router as units_router
 from app.api.routes.ingestion import router as ingestion_router
 from app.api.routes.criteria import router as criteria_router
+from app.api.routes.alerts import router as alerts_router
+from app.scheduler import start_scheduler, shutdown_scheduler
 from fastapi.middleware.cors import CORSMiddleware
 from app.models.verdict_review import VerdictReview
+from app.api.routes.alerts import router as alerts_router
+from app.api.routes.reports import router as reports_router   # <-- ADD
 
 
 app = FastAPI(
@@ -51,6 +55,29 @@ app.include_router(criteria_router)
 app.include_router(risk.router)
 app.include_router(risk.unit_router)
 app.include_router(lecturer_router)
+app.include_router(alerts_router)
+app.include_router(reports_router)  # <-- ADD
+
+
+@app.on_event("startup")
+def _start_background_jobs() -> None:
+    """
+    Seeds the system email templates and starts the alert scheduler.
+
+    RUN THIS API WITH A SINGLE WORKER. Under `uvicorn --workers 4`
+    every worker executes this hook and starts its own scheduler, which
+    without protection would mean four weekly sweeps and four copies of
+    every student email. Both jobs take a PostgreSQL advisory lock so
+    only one actually runs - but a single worker remains the correct
+    way to deploy this, and the lock is the guard for the day someone
+    forgets.
+    """
+    start_scheduler()
+
+
+@app.on_event("shutdown")
+def _stop_background_jobs() -> None:
+    shutdown_scheduler()
 
 
 @app.get("/")

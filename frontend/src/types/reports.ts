@@ -104,6 +104,17 @@ export interface ReportInterventionSummary {
   reviews_pending: number;
 }
 
+export interface ReportCheckpoint {
+  week: number;
+  /**
+   * Distinct students with a verdict at this week — NOT rows. The
+   * verdict table is append-only, so a unit re-analysed four times
+   * would otherwise report four times its cohort size.
+   */
+  student_count: number;
+  last_analysed_at: string | null;
+}
+
 export interface ReportResponse {
   unit_id: number;
   unit_code: string;

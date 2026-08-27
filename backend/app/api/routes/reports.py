@@ -33,9 +33,13 @@ from app.core.dependencies import require_role
 from app.database import get_db
 from app.models.enums import UserRole
 from app.models.user import User
-from app.schemas.reports import ReportResponse
+from app.schemas.reports import ReportCheckpoint, ReportResponse
 from app.services.report_pdf import build_report_pdf, report_filename
-from app.services.report_service import DEFAULT_CHECKPOINT_WEEK, build_unit_report
+from app.services.report_service import (
+    DEFAULT_CHECKPOINT_WEEK,
+    available_checkpoints,
+    build_unit_report,
+)
 
 router = APIRouter(
     prefix="/lecturer/reports",
@@ -128,3 +132,28 @@ def download_unit_report(
             "Cache-Control": "no-store",
         },
     )
+
+
+@router.get("/unit/{unit_id}/checkpoints", response_model=list[ReportCheckpoint])
+def list_unit_checkpoints(
+    unit_id: int = Path(..., ge=1),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.LECTURER)),
+) -> list[ReportCheckpoint]:
+    """
+    The checkpoint weeks this unit has actually been analysed at.
+
+    Exists so the week selector offers real options instead of a fixed
+    range of weeks that would mostly render "no analysis has been run".
+
+    An empty list is a valid answer and means the unit has never been
+    analysed - the report endpoint still works and says so.
+    """
+    checkpoints = available_checkpoints(
+        db, lecturer_id=current_user.id, unit_id=unit_id
+    )
+
+    if checkpoints is None:
+        raise HTTPException(status_code=404, detail="Unit not found")
+
+    return [ReportCheckpoint(**row) for row in checkpoints]

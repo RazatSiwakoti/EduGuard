@@ -1,6 +1,9 @@
+import { useState } from "react";
 import { CircleAlert, Mail, MailX, TrendingDown, UserCheck } from "lucide-react";
+import type { RiskBucket } from "../../types/dashboard";
 import type { ReportStudentRow } from "../../types/reports";
 import { BUCKET_STYLES } from "../dashboard/chartTheme";
+import { BUCKET_LABELS } from "../../utils/dashboardAggregations";
 import { formatDateTime } from "../../utils/studentCard";
 
 interface AtRiskTableProps {
@@ -16,6 +19,16 @@ interface AtRiskTableProps {
 /** Movement smaller than this is noise, not a direction. Matches the
  *  server's MOMENTUM_BAND_PP and the students table's trend column. */
 const MOMENTUM_BAND_PP = 10;
+
+/** The only tiers that can appear on this list, worst first. */
+const FILTER_TIERS: RiskBucket[] = ["high_risk", "low_risk", "needs_review"];
+
+/** Which bucket a row is displayed under. A review-pending student
+ *  carries a NULL tier, so falling back keeps them coloured and
+ *  labelled rather than rendering as an unstyled blank. */
+function bucketOf(row: ReportStudentRow): RiskBucket {
+  return row.risk_tier ?? "needs_review";
+}
 
 /**
  * A figure, or a dash. NEVER a zero.
@@ -71,6 +84,37 @@ function Figure({
  * would be a second implementation of the same rule.
  */
 export default function AtRiskTable({ rows, alertsAvailable }: AtRiskTableProps) {
+  /**
+   * A DISPLAY filter, and nothing more.
+   *
+   * It never changes a figure: the cohort summary, the criteria table
+   * and the PDF all still describe every student. The header says how
+   * many rows are hidden, because a filtered list that looks like a
+   * whole list is exactly the kind of quiet misreading this page is
+   * built to prevent.
+   *
+   * An empty set means "no filter", not "show nothing" — a filter that
+   * can hide everything by accident is a trap.
+   */
+  const [hidden, setHidden] = useState<Set<RiskBucket>>(new Set());
+
+  const visible = rows.filter((row) => !hidden.has(bucketOf(row)));
+  const filtering = hidden.size > 0;
+
+  function toggle(tier: RiskBucket) {
+    setHidden((current) => {
+      const next = new Set(current);
+      if (next.has(tier)) next.delete(tier);
+      else next.add(tier);
+      return next;
+    });
+  }
+
+  // Only offer a chip for a tier that actually has somebody in it.
+  const presentTiers = FILTER_TIERS.filter((tier) =>
+    rows.some((row) => bucketOf(row) === tier),
+  );
+
   return (
     <section className="overflow-hidden rounded-2xl border border-stone-200 bg-white">
       <header className="border-b border-stone-200 px-5 py-4">
@@ -79,7 +123,15 @@ export default function AtRiskTable({ rows, alertsAvailable }: AtRiskTableProps)
             Students requiring attention
           </h2>
           <span className="rounded-full bg-stone-100 px-2 py-0.5 text-xs font-medium tabular-nums text-stone-600">
-            {rows.length} student{rows.length === 1 ? "" : "s"}
+            {filtering ? (
+              <>
+                showing {visible.length} of {rows.length}
+              </>
+            ) : (
+              <>
+                {rows.length} student{rows.length === 1 ? "" : "s"}
+              </>
+            )}
           </span>
         </div>
         <p className="mt-1 text-xs leading-relaxed text-stone-500">
@@ -88,13 +140,60 @@ export default function AtRiskTable({ rows, alertsAvailable }: AtRiskTableProps)
           <span className="font-medium text-stone-700">not recorded</span>, which
           is not the same as zero.
         </p>
+
+        {presentTiers.length > 1 && (
+          <div className="mt-3 flex flex-wrap items-center gap-1.5">
+            {presentTiers.map((tier) => {
+              const off = hidden.has(tier);
+              const count = rows.filter((row) => bucketOf(row) === tier).length;
+              return (
+                <button
+                  key={tier}
+                  type="button"
+                  onClick={() => toggle(tier)}
+                  aria-pressed={!off}
+                  className={`rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset transition ${
+                    off
+                      ? "bg-white text-stone-400 ring-stone-200 hover:text-stone-600"
+                      : BUCKET_STYLES[tier].pill
+                  }`}
+                >
+                  {BUCKET_LABELS[tier]}
+                  <span className="ml-1.5 tabular-nums opacity-70">{count}</span>
+                </button>
+              );
+            })}
+
+            {filtering && (
+              <span className="ml-1 text-xs text-stone-500">
+                filters this list only &mdash; the summary above and the PDF
+                still cover every student
+              </span>
+            )}
+          </div>
+        )}
       </header>
 
-      {rows.length === 0 ? (
+      {visible.length === 0 ? (
         <p className="px-6 py-10 text-center text-sm text-stone-500">
-          No students are currently on the at-risk list for this checkpoint. Read
-          this alongside the qualifications above &mdash; students who have never
-          been analysed do not appear here.
+          {filtering ? (
+            <>
+              Every student on this list is hidden by the filters above.{" "}
+              <button
+                type="button"
+                onClick={() => setHidden(new Set())}
+                className="font-medium text-stone-700 underline underline-offset-2"
+              >
+                Show all {rows.length}
+              </button>
+            </>
+          ) : (
+            <>
+              No students are currently on the at-risk list for this checkpoint.
+              Read this alongside the qualifications above &mdash; students who
+              have never been analysed do not appear here.
+            </>
+          )}
         </p>
       ) : (
         <div className="overflow-x-auto">
@@ -128,11 +227,8 @@ export default function AtRiskTable({ rows, alertsAvailable }: AtRiskTableProps)
             </thead>
 
             <tbody className="divide-y divide-stone-100">
-              {rows.map((row) => {
-                // A review-pending student carries a NULL tier. Falling
-                // back to needs_review keeps their row coloured and
-                // labelled rather than rendering as an unstyled blank.
-                const bucket = row.risk_tier ?? "needs_review";
+              {visible.map((row) => {
+                const bucket = bucketOf(row);
                 const declining =
                   row.attendance_trend !== null &&
                   row.attendance_trend <= -MOMENTUM_BAND_PP;

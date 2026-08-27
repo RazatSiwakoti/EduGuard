@@ -709,3 +709,54 @@ def build_unit_report(
             intervention["available"], now,
         ),
     }
+
+
+def available_checkpoints(
+    db: Session, lecturer_id: int, unit_id: int
+) -> Optional[list[dict]]:
+    """
+    Which checkpoint weeks this unit actually has an analysis for.
+
+    Feeds the week selector. Building that selector from a fixed 1-14
+    range would offer a lecturer thirteen weeks that all render "no
+    analysis has been run" - a menu of dead ends.
+
+    Returns None when the caller does not teach the unit, which the
+    route renders as 404, exactly as the report itself does. Ownership
+    is re-checked here rather than trusted from a previous call: this is
+    a separate request and the unit id in it is attacker-controlled.
+
+    Counts DISTINCT STUDENTS, not verdict rows. `final_verdicts` is
+    append-only, so a unit re-analysed four times would otherwise report
+    four times its cohort size.
+    """
+    if _owned_unit(db, unit_id, lecturer_id) is None:
+        return None
+
+    rows = db.execute(
+        select(FinalVerdict).where(FinalVerdict.unit_id == unit_id)
+    ).scalars().all()
+
+    weeks: dict[int, dict] = {}
+    for verdict in rows:
+        entry = weeks.setdefault(
+            verdict.checkpoint_week,
+            {"week": verdict.checkpoint_week, "students": set(),
+             "last_analysed_at": None},
+        )
+        entry["students"].add(verdict.student_id)
+        computed = _as_aware(verdict.created_at)
+        if computed and (
+            entry["last_analysed_at"] is None
+            or computed > entry["last_analysed_at"]
+        ):
+            entry["last_analysed_at"] = computed
+
+    return [
+        {
+            "week": entry["week"],
+            "student_count": len(entry["students"]),
+            "last_analysed_at": entry["last_analysed_at"],
+        }
+        for entry in sorted(weeks.values(), key=lambda e: e["week"])
+    ]

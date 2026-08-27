@@ -154,7 +154,22 @@ class ReportInterventionSummary(BaseModel):
 
     reviews_resolved: int = 0
     reviews_pending: int = 0
+    
+class ReportCheckpoint(BaseModel):
+    """
+    One checkpoint week that actually has an analysis behind it.
 
+    The week selector is built from these rather than from a fixed 1-14
+    range. Offering a lecturer thirteen weeks that would all render
+    "no analysis has been run" is a menu of dead ends; offering only the
+    weeks that were analysed is a short, honest list.
+    """
+
+    week: int
+    #: Distinct students with a verdict at this week - NOT rows, because
+    #: the verdict table is append-only and a re-run leaves several.
+    student_count: int
+    last_analysed_at: Optional[datetime] = None
 
 class ReportResponse(BaseModel):
     """One unit's complete report at one checkpoint."""

@@ -11,7 +11,7 @@ failure, so it can be run unattended.
 import sys
 from datetime import timedelta
 
-from report_test_fixture import NOW, WEEK, build_db
+from tests.report_test_fixture import NOW, WEEK, build_db
 from app.services.report_service import build_unit_report
 
 failures: list[str] = []

@@ -2,7 +2,9 @@ import { useState } from "react";
 import { isAxiosError } from "axios";
 import { CircleAlert, FileBarChart, Loader2 } from "lucide-react";
 import { useLecturerUnits } from "../hooks/useLecturerUnits";
-import { useUnitReport } from "../hooks/useReports";
+import { useReportCheckpoints, useUnitReport } from "../hooks/useReports";
+import { reportService } from "../services/reportService";
+import ReportToolbar from "../components/reports/ReportToolBar";
 import CaveatsPanel from "../components/reports/CaveatsPanel";
 import CohortSummary from "../components/reports/CohortSummary";
 import CriteriaTable from "../components/reports/CriteriaTable";
@@ -53,8 +55,79 @@ export default function ReportsPage() {
     chosen !== null && (units?.some((unit) => unit.id === chosen) ?? false);
   const unitId = chosenIsValid ? chosen : (units?.[0]?.id ?? null);
 
-  const reportQuery = useUnitReport(unitId);
+  const checkpointsQuery = useReportCheckpoints(unitId);
+  const checkpoints = checkpointsQuery.data ?? [];
+
+  /**
+   * Same shape as the unit picker: state holds only the explicit
+   * choice, the default is derived. The LAST checkpoint is the default,
+   * not the first — a lecturer opening this page wants the most recent
+   * analysis, not the one from week 4.
+   *
+   * The choice is dropped when it is not among this unit's checkpoints,
+   * which is what happens the moment the lecturer switches units. Left
+   * in place it would request a week that unit was never analysed at
+   * and render an empty report for no reason.
+   */
+  const [chosenWeek, setChosenWeek] = useState<number | null>(null);
+  const weekIsValid =
+    chosenWeek !== null && checkpoints.some((c) => c.week === chosenWeek);
+  const checkpointWeek = weekIsValid
+    ? chosenWeek
+    : (checkpoints.at(-1)?.week ?? null);
+
+  const reportQuery = useUnitReport(unitId, checkpointWeek);
   const report = reportQuery.data;
+
+  const [downloading, setDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+
+  /**
+   * Fetch the PDF as a blob and hand it to the browser.
+   *
+   * A plain <a href> cannot be used: the API is authenticated with a
+   * Bearer token attached by the axios interceptor, and a link
+   * navigation sends cookies, not headers. It would arrive
+   * unauthenticated, 401, and the browser would save the JSON error as
+   * a file called "pdf".
+   *
+   * Measured at 689 ms for a 300-student cohort, so a spinner on the
+   * button is the whole of the loading treatment this needs — no
+   * background job, no polling.
+   */
+  async function handleDownload() {
+    if (unitId === null) return;
+
+    setDownloading(true);
+    setDownloadError(null);
+
+    try {
+      const { blob, filename } = await reportService.downloadPdf(
+        unitId,
+        checkpointWeek,
+      );
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      // Released on the next tick: revoking synchronously can cancel
+      // the download in some browsers before it has read the blob.
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+    } catch {
+      // Deliberately not a toast. The button stays where the lecturer
+      // is looking, and a failed download that vanishes after four
+      // seconds is a failed download nobody notices.
+      setDownloadError(
+        "The PDF could not be generated. The report above is unaffected — try again.",
+      );
+    } finally {
+      setDownloading(false);
+    }
+  }
 
   const notFound =
     isAxiosError(reportQuery.error) && reportQuery.error.response?.status === 404;
@@ -88,20 +161,17 @@ export default function ReportsPage() {
           </div>
 
           {units && units.length > 0 && (
-            <label className="flex items-center gap-2 text-sm">
-              <span className="text-stone-500">Unit</span>
-              <select
-                value={unitId ?? ""}
-                onChange={(event) => setChosen(Number(event.target.value))}
-                className="rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900 focus:border-stone-400 focus:outline-none focus:ring-1 focus:ring-stone-400"
-              >
-                {units.map((unit) => (
-                  <option key={unit.id} value={unit.id}>
-                    {unit.unit_code} — {unit.unit_name}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <ReportToolbar
+              units={units}
+              unitId={unitId}
+              onUnitChange={setChosen}
+              checkpoints={checkpoints}
+              checkpointWeek={checkpointWeek}
+              onWeekChange={setChosenWeek}
+              onDownload={handleDownload}
+              downloading={downloading}
+              canDownload={report !== undefined}
+            />
           )}
         </header>
 
@@ -172,6 +242,16 @@ export default function ReportsPage() {
         {/* ---------------------------------------------------------- */}
         {/* The report                                                  */}
         {/* ---------------------------------------------------------- */}
+        {downloadError && (
+          <div className="mb-5 flex items-start gap-2.5 rounded-2xl border border-red-200 bg-red-50 px-5 py-3">
+            <CircleAlert
+              className="mt-0.5 h-4 w-4 shrink-0 text-red-500"
+              aria-hidden="true"
+            />
+            <p className="text-sm text-red-800">{downloadError}</p>
+          </div>
+        )}
+
         {report && (
           <div className="space-y-5">
             {/* FIRST, deliberately. See the component's docstring. */}

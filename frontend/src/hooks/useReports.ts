@@ -33,3 +33,22 @@ export function useUnitReport(
     retry: false,
   });
 }
+
+
+/**
+ * Which checkpoint weeks this unit has been analysed at.
+ *
+ * Same long staleTime as the report itself, and for the same reason:
+ * new checkpoints appear only when someone deliberately runs an
+ * analysis, never while a lecturer reads the page.
+ */
+export function useReportCheckpoints(unitId: number | null) {
+  return useQuery({
+    queryKey: ["lecturer-report-checkpoints", unitId],
+    queryFn: () => reportService.getCheckpoints(unitId!),
+    enabled: Number.isFinite(unitId) && (unitId ?? 0) > 0,
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+    retry: false,
+  });
+}

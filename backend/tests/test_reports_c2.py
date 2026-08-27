@@ -16,7 +16,7 @@ import tempfile
 from datetime import timedelta
 from pathlib import Path
 
-from report_test_fixture import NOW, WEEK, build_db  # noqa: E402
+from tests.report_test_fixture import NOW, WEEK, build_db  # noqa: E402
 from app.services.report_pdf import (  # noqa: E402
     MISSING,
     build_report_pdf,
@@ -55,7 +55,11 @@ def text_of(pdf: bytes) -> str:
         source.write_bytes(pdf)
         result = subprocess.run(
             ["pdftotext", "-layout", str(source), "-"],
-            capture_output=True, text=True, check=True,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=True,
         )
     return result.stdout
 
@@ -65,8 +69,13 @@ def page_count(pdf: bytes) -> int:
         source = Path(tmp) / "r.pdf"
         source.write_bytes(pdf)
         result = subprocess.run(
-            ["pdfinfo", str(source)], capture_output=True, text=True, check=True
-        )
+            ["pdfinfo", str(source)],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=True,
+)
     match = re.search(r"Pages:\s+(\d+)", result.stdout)
     return int(match.group(1)) if match else 0
 
@@ -305,7 +314,13 @@ check("sent as an attachment, not inline",
 check("not cached - risk tiers change with every analysis run",
       "no-store" in route_source)
 check("still 404 on a unit the caller does not teach",
-      route_source.count("Unit not found") == 2, route_source.count("Unit not found"))
+      route_source.count("status_code=404")
+      == route_source.count('detail="Unit not found"')
+      # "403" alone matches the DOCSTRING that explains why 403 is not
+      # used - the second false positive of this kind today. Match the
+      # actual status argument, not the number anywhere in the file.
+      and "status_code=403" not in route_source,
+      f'404s={route_source.count("status_code=404")}')
 
 heading("reportlab is declared as a dependency")
 requirements = Path("requirements.txt").read_text()

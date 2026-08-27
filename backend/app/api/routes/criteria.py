@@ -3,6 +3,18 @@ Lecturer routes: manage Criteria for a unit they are assigned to.
 
 Ownership check mirrors app.api.routes.ingestion - a lecturer must own
 the specific unit_id in the path, not just hold the Lecturer role.
+
+WHAT A LECTURER MAY WRITE (section D1)
+--------------------------------------
+Both write paths go through `criteria_service`, which enforces:
+
+ - attendance and Moodle are fixed - refused, not silently ignored
+- assessment and weekly-tutorial thresholds may be LOWERED to their
+  floor (45% / 40%) and never raised above the 50% default
+
+Those rules live in one place because create and update used to have no
++rules at all: a lecturer could set any threshold, including zero, which
++turns "at risk" into whatever they last typed.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -57,6 +69,14 @@ def create_criteria(
     _require_assigned_lecturer(unit, current_user)
 
     criteria = Criteria(unit_id=unit_id, **payload.model_dump())
+    data = payload.model_dump()
+    try:
+        criteria_service.assert_lecturer_may_create(data)
+    except ValueError as exc:
+        #400, not 422: the payload is well-FORMED, it is just not permitted. A 422 would tell the client to fix its shape.
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+    criteria = Criteria(unit_id=unit_id, **data)
     db.add(criteria)
     db.commit()
     db.refresh(criteria)
@@ -100,6 +120,10 @@ def update_criteria(
     criteria = _get_criteria_or_404(db, unit_id, criteria_id)
 
     update_data = payload.model_dump(exclude_unset=True)
+    try:
+        criteria_service.assert_lecturer_may_update(criteria, update_data)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))    
     for field, value in update_data.items():
         setattr(criteria, field, value)
 

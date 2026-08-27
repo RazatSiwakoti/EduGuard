@@ -5,6 +5,7 @@ import { useUnitCriteria } from "../../hooks/useLecturerUnits";
 import { CATEGORY_COLUMN_COUNT, FIXED_CATEGORIES } from "../../types/criteria";
 import type { CriteriaCategory } from "../../types/criteria";
 import { CATEGORY_LABELS } from "../../utils/dashboardAggregations";
+import RunAnalysisButton from "../../components/analysis/RunAnalysisButton";
 
 /**
  * What this unit is marked on, and what to do next.
@@ -43,6 +44,13 @@ export default function UnitOverviewTab() {
               unit; anything else is yours to define.
             </p>
           </div>
+
+          {/* Scoped to this unit so lecturers can re-score only this cohort. */}
+          <RunAnalysisButton
+            unitId={unit.id}
+            label="Run analysis"
+            variant="secondary"
+          />
         </header>
 
         {isLoading && (

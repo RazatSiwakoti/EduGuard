@@ -25,7 +25,6 @@ from app.models.assessment_event import AssessmentEvent
 from app.models.enums import CriteriaCategory
 from app.models.risk_score import RiskScore
 from app.services.rule_score_service import get_latest_criterion_value
-from app.services.ml_engine import predict_risk
 from app.services.ml_engine import predict_risk, build_ml_explanation
 
 

@@ -33,11 +33,14 @@ from enum import Enum
 
 from app.core.risk_constants import (
     ASSESSMENT_THRESHOLD_FLOOR,
+    FIXED_ATTENDANCE_THRESHOLD,
+    FIXED_MOODLE_THRESHOLD,
     TUTORIAL_THRESHOLD_FLOOR,
     SAFE_CUTOFF,
     HIGH_RISK_CUTOFF,
     TUTORIAL_STATUS_CREDIT,
 )
+from app.models.enums import CriteriaCategory
 
 
 class RiskTier(str, Enum):
@@ -212,24 +215,83 @@ def compute_rule_based_risk(criteria: list[CriterionInput]) -> RuleEngineResult:
         breakdown=breakdown,
     )
 
+#: Floors by CriteriaCategory VALUE, not by an English word.
+#:
+#: This dict was previously keyed "tutorial" while the enum value is
+#: "weekly_tut", so `floors.get("weekly_tut")` returned None and tutorial
+#: thresholds were silently accepted at any value, including zero. The
+#: function had no callers, so nothing ever surfaced it. Keying off the
+#: enum's own values is what stops that recurring.
+THRESHOLD_FLOORS: dict[str, float] = {
+    CriteriaCategory.ASSESSMENT.value: ASSESSMENT_THRESHOLD_FLOOR,
+    CriteriaCategory.WEEKLY_TUT.value: TUTORIAL_THRESHOLD_FLOOR,
+}
 
-def validate_lecturer_threshold(category: str, proposed_threshold: float) -> None:
-    """
-    Enforces the global minimum floor for lecturer-adjustable thresholds.
-    Call this from the Criteria create/update service BEFORE the row is
-    written. Attendance and Moodle should never reach this function since
-    they aren't lecturer-editable at the API layer.
-    """
-    floors = {
-        "assessment": ASSESSMENT_THRESHOLD_FLOOR,
-        "tutorial": TUTORIAL_THRESHOLD_FLOOR,
-    }
+#: Categories whose threshold is a system constant, not a lecturer's
+#: choice. Listed explicitly rather than left to fall through the
+#: floors lookup: "no floor configured" and "not editable at all" are
+#: different rules, and the old code could not tell them apart.
+FIXED_THRESHOLDS: dict[str, float] = {
+    CriteriaCategory.ATTENDANCE.value: FIXED_ATTENDANCE_THRESHOLD,
+    CriteriaCategory.MOODLE.value: FIXED_MOODLE_THRESHOLD,
+}
 
-    floor = floors.get(category.lower())
-    if floor is not None and proposed_threshold < floor:
+#: The default every unit starts at. A lecturer may lower an adjustable
+#: threshold to its floor, never raise it above this.
+DEFAULT_THRESHOLD = 50.0
+
+
+def validate_lecturer_threshold(category, proposed_threshold: float) -> None:
+    """
+    Enforces the rules on a lecturer-set threshold. Raises ValueError.
+
+    Call BEFORE the row is written, from both create and update.
+
+    THREE OUTCOMES, DELIBERATELY DISTINCT:
+
+    - Assessment and weekly tutorials are adjustable DOWNWARD ONLY, from
+      the 50% default to their own floor (45% and 40%). Raising the bar
+      is refused too: a lecturer quietly making their unit harder to
+      pass changes what "at risk" means without anyone being told.
+
+    - Attendance and Moodle are FIXED. Any attempt to change them is
+      refused rather than ignored, because silently discarding a write
+      the caller believes succeeded is worse than an error.
+
+    - A criterion with no category has no floor. It is already reported
+      as a caveat ("invisible to the ML model"); section D2 stops them
+      being created at all.
+
+    Accepts a CriteriaCategory or its string value, so callers do not
+    have to remember which one they are holding.
+    """
+    if category is None:
+        return
+
+    key = getattr(category, "value", category)
+    key = str(key).lower()
+
+    fixed = FIXED_THRESHOLDS.get(key)
+    if fixed is not None:
         raise ValueError(
-            f"{category.title()} threshold cannot be set below {floor}% "
-            f"(proposed: {proposed_threshold}%)."
+            f"The {key.replace('_', ' ')} threshold is fixed at {fixed:g} and "
+            "cannot be changed."
+        )
+
+    floor = THRESHOLD_FLOORS.get(key)
+    if floor is None:
+        return
+
+    if proposed_threshold < floor:
+        raise ValueError(
+            f"Threshold cannot be set below {floor:g}% "
+            f"(proposed: {proposed_threshold:g}%)."
+        )
+
+    if proposed_threshold > DEFAULT_THRESHOLD:
+        raise ValueError(
+            f"Threshold cannot be set above the {DEFAULT_THRESHOLD:g}% default "
+            f"(proposed: {proposed_threshold:g}%)."
         )
 
 def build_rule_explanation(result: RuleEngineResult, top_n: int = 3) -> str:

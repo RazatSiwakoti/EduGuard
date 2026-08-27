@@ -21,6 +21,7 @@ import MomentumChart from "../components/dashboard/MomentumChart";
 import RiskByUnitChart from "../components/dashboard/RiskByUnitChart";
 import RiskDistributionDonut from "../components/dashboard/RiskDistributionDonut";
 import StudentTable from "../components/dashboard/StudentTable";
+import RunAnalysisButton from "../components/analysis/RunAnalysisButton";
 
 /**
  * The lecturer's interactive analytics dashboard — Phase 6.2.
@@ -162,6 +163,15 @@ export default function Dashboard() {
             </p>
           </div>
 
+----------------------
+
+
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Refresh re-reads what the engines already decided.
+              Run analysis re-decides it. Two different actions, so
+              they sit side by side rather than one being buried. */}            
+            <RunAnalysisButton label="Run analysis on all units" />
+
           <button
             type="button"
             onClick={() => void refetch()}
@@ -174,6 +184,7 @@ export default function Dashboard() {
             />
             Refresh
           </button>
+          </div>
         </header>
 
         <KpiTiles

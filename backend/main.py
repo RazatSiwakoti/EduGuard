@@ -24,7 +24,8 @@ from app.scheduler import start_scheduler, shutdown_scheduler
 from fastapi.middleware.cors import CORSMiddleware
 from app.models.verdict_review import VerdictReview
 from app.api.routes.alerts import router as alerts_router
-from app.api.routes.reports import router as reports_router   # <-- ADD
+from app.api.routes.reports import router as reports_router
+from app.api.routes.analysis import router as analysis_router
 
 
 app = FastAPI(
@@ -56,7 +57,8 @@ app.include_router(risk.router)
 app.include_router(risk.unit_router)
 app.include_router(lecturer_router)
 app.include_router(alerts_router)
-app.include_router(reports_router)  # <-- ADD
+app.include_router(reports_router)
+app.include_router(analysis_router)
 
 
 @app.on_event("startup")

@@ -45,6 +45,7 @@ from app.models.student import Student
 from app.models.unit import Unit
 from app.models.user import User
 from app.models.verdict_review import VerdictReview
+from app.services import unit_composition
 
 DEFAULT_CHECKPOINT_WEEK = 8
 
@@ -492,6 +493,7 @@ def _caveats(
     last_analysed_at: Optional[datetime],
     intervention_available: bool,
     now: datetime,
+    stale : Optional[dict] = None,
 ) -> list[str]:
     """
     The qualifications this document must carry.
@@ -528,6 +530,19 @@ def _caveats(
             f"{incomplete_count} risk score{'s' if incomplete_count != 1 else ''} "
             f"{'were' if incomplete_count != 1 else 'was'} computed on incomplete "
             "input data and should not be read with full confidence."
+        )
+
+    if stale and stale.get("stale_count"):
+        stale_count = stale["stale_count"]
+        student_count = stale.get("student_count", 0)
+        caveats.append(
+            f"{stale_count} risk result{'s' if stale_count != 1 else ''} "
+            f"({student_count} student{'s' if student_count != 1 else ''}) "
+            f"{'were' if stale_count != 1 else 'was'} computed before this "
+            "unit's criteria were last changed, so the marks and weights "
+            "behind {} no longer match the unit. Re-run the analysis.".format(
+                "them" if stale_count != 1 else "it"
+            )
         )
 
     uncategorised = [c for c in criteria if c.category is None]
@@ -707,6 +722,10 @@ def build_unit_report(
         "caveats": _caveats(
             criteria, buckets, incomplete_count, last_analysed_at,
             intervention["available"], now,
+            # Scoped to THIS checkpoint. A week-4 analysis going stale is not a caveat on the week-8 report the reader is holding.
+            stale = unit_composition.stale_verdict_summary(
+                db, unit, checkpoint_week=checkpoint_week
+            ),
         ),
     }
 

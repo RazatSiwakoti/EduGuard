@@ -26,3 +26,21 @@ class CriteriaCategory(str, Enum):
     WEEKLY_TUT = "weekly_tut"
     ASSESSMENT = "assessment"
     MOODLE = "moodle"
+
+
+class AssessmentKind(str, Enum):
+    """
+    What KIND of assessment a criterion is (section T2).
+
+    Deliberately a SECOND field rather than two more CriteriaCategory
+    members. `category` is the ML contract: `ml_score_service`,
+    `rule_score_service`, `report_service` and the training notebook all
+    branch on its four values, and splitting ASSESSMENT into QUIZ and
+    ASSIGNMENT would have silently dropped every assessment out of every
+    one of those branches. `kind` is a label the coordinator sets and the
+    composition rules read; nothing in the scoring path looks at it.
+
+    NULL for attendance, Moodle and weekly tutorials - they have no kind.
+    """
+    QUIZ = "quiz"
+    ASSIGNMENT = "assignment"

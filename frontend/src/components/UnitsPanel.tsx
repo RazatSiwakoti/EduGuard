@@ -11,6 +11,8 @@ import {
   useUnassignLecturer,
 } from "../hooks/useUnits";
 import { useLecturersList } from "../hooks/useLecturers";
+import CriteriaStatusCell from "./units/CriteriaStatusCell";
+import CriteriaSetupDialog from "./units/CriteriaSetupDialog";
 import type { Unit } from "../types/unit";
 
 export default function UnitsPanel() {
@@ -19,6 +21,11 @@ export default function UnitsPanel() {
   const [editTarget, setEditTarget] = useState<Unit | null>(null);
   const [assignTarget, setAssignTarget] = useState<Unit | null>(null);
   const [archiveTargetId, setArchiveTargetId] = useState<number | null>(null);
+  // The unit whose criteria are being configured (section T3). Held as
+  // the whole Unit, not an id: the dialog title and the unlock
+  // confirmation both need the unit CODE, and re-deriving it from the
+  // list would break the moment that list refetches mid-edit.
+  const [criteriaTarget, setCriteriaTarget] = useState<Unit | null>(null);
 
   const { data: units, isLoading, isError } = useUnitsList(showInactive);
   const { data: lecturers } = useLecturersList(false); // active lecturers only
@@ -137,6 +144,7 @@ export default function UnitsPanel() {
                 <th className="px-4 py-2 font-medium">Level</th>
                 <th className="px-4 py-2 font-medium">Lecturer</th>
                 <th className="px-4 py-2 font-medium">Enrolled</th>
+                <th className="px-4 py-2 font-medium">Criteria</th>
                 <th className="px-4 py-2 font-medium">Status</th>
                 <th className="px-4 py-2 font-medium">Actions</th>
               </tr>
@@ -168,6 +176,9 @@ export default function UnitsPanel() {
                   <td className="px-4 py-2.5 text-stone-600">
                     {unit.enrolled_count}
                   </td>
+                  <td className="whitespace-nowrap px-4 py-2.5">
+                    <CriteriaStatusCell unitId={unit.id} />
+                  </td>
                   <td className="px-4 py-2.5">
                     <span
                       className={`rounded-full px-2 py-0.5 text-xs font-medium ${
@@ -183,6 +194,13 @@ export default function UnitsPanel() {
                   </td>
                   <td className="px-4 py-2.5">
                     <div className="flex flex-wrap gap-2">
+                      <button
+                        onClick={() => setCriteriaTarget(unit)}
+                        className="text-xs font-medium text-stone-900 underline decoration-stone-300 underline-offset-2 hover:decoration-stone-900"
+                        data-testid={`setup-criteria-${unit.id}`}
+                      >
+                        Set up criteria
+                      </button>
                       <button
                         onClick={() => setEditTarget(unit)}
                         className="text-xs font-medium text-stone-600 hover:underline"
@@ -227,6 +245,18 @@ export default function UnitsPanel() {
           </table>
         )}
       </div>
+
+      {/* Criteria setup (section T3). Mounted only while a unit is
+          selected, so closing it discards the form state and the next
+          open re-reads the shape from the server. */}
+      {criteriaTarget && (
+        <CriteriaSetupDialog
+          unitId={criteriaTarget.id}
+          unitCode={criteriaTarget.unit_code}
+          unitName={criteriaTarget.unit_name}
+          onOpenChange={(open) => !open && setCriteriaTarget(null)}
+        />
+      )}
 
       {/* Create Unit modal */}
       <Dialog.Root open={isCreateOpen} onOpenChange={setIsCreateOpen}>

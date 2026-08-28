@@ -53,5 +53,10 @@ class User(Base):
     last_login = Column(DateTime(timezone=True), nullable=True)
 
     # relationships
-    units = relationship("Unit", back_populates="lecturer")
+    #foreign keys is required since Unit gained `criteria_unlocked_by (section T1) - Unit now has TWO foreign keys to users.id, and
+   # without this SQLAlchemy cannot decide which one means "teaches".
+    units = relationship(
+        "Unit", back_populates="lecturer", foreign_keys="Unit.lecturer_id"
+    ) 
+
     rule_versions = relationship("RuleVersion", back_populates="creator")

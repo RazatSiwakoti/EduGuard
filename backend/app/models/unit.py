@@ -17,7 +17,9 @@ students, dual-pathway students) that a hard constraint would wrongly
 block. Useful for reporting and the ML pipeline, not a hard rule.
 """
 
-from sqlalchemy import Column, Integer, String, Date, Boolean, ForeignKey, UniqueConstraint
+from sqlalchemy import (
+    Column, Integer, String, Date, DateTime, Boolean, ForeignKey, UniqueConstraint,
+)
 from sqlalchemy.sql import true
 from sqlalchemy.orm import relationship
 from app.models.base import Base
@@ -51,7 +53,36 @@ class Unit(Base):
     is_active = Column(Boolean, nullable=False, default=True, server_default=true())
     status = Column(String, nullable=False, default="UNASSIGNED")
 
-    lecturer = relationship("User", back_populates="units")
+    # --- criteria shape lifecycle (section T1) -------------------------
+    # When this unit's criteria SHAPE last changed. Any FinalVerdict
+    # older than this was computed against weights that no longer exist,
+    # which is how staleness is derived - there is deliberately no
+    # `is_stale` flag to keep in sync.
+    #
+    # NULL means "no shape change has ever been recorded", not "changed
+    # at the epoch". Every unit that predates this column is NULL and
+    # therefore has nothing stale, which is correct: back-filling it
+    # would have declared every historical result suspect on the day the
+    # feature shipped.
+    #
+    # A rename does NOT bump this. A label is not a rule.
+    criteria_updated_at = Column(DateTime, nullable=True)
+
+    # A one-shot admin unlock. Set by POST /units/{id}/criteria/unlock,
+    # cleared by the next successful shape change. Stored as a timestamp
+    # rather than a boolean so the window is auditable after the fact -
+    # "who opened this unit and when" is the question anyone asks after a
+    # cohort's results move.
+    criteria_unlocked_at = Column(DateTime, nullable=True)
+    criteria_unlocked_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+    # `foreign_keys` is now REQUIRED on both sides: `criteria_unlocked_by`
+    # is a second FK to users.id, so SQLAlchemy can no longer infer which
+    # column joins a Unit to its lecturer and raises AmbiguousForeignKeys
+    # at mapper-configuration time - i.e. the app fails to start, loudly.
+    lecturer = relationship(
+        "User", back_populates="units", foreign_keys=[lecturer_id]
+    )
     enrollments = relationship("Enrollment", back_populates="unit")
     criteria = relationship("Criteria", back_populates="unit")
     rule_versions = relationship("RuleVersion", back_populates="unit")

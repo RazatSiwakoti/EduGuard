@@ -47,3 +47,19 @@ class UserOut(BaseModel):
     is_active: bool
     created_at: datetime
     last_login: Optional[datetime] = None
+
+
+# CURRENT USER RESPONSE (/auth/me)
+class MeOut(UserOut):
+    """
+    UserOut plus the one thing only the signed-in user needs to know
+    about themselves: whether they hold a unit, and so whether the
+    lecturer navigation belongs on their screen.
+
+    A SUBCLASS used only by /auth/me, deliberately not a field added to
+    UserOut itself. UserOut is also the row schema for
+    `GET /admin/lecturers`, and putting `holds_units` there would fire
+    one EXISTS query per row on every listing to answer a question that
+    screen never asks - an N+1 introduced for a field nothing reads.
+    """
+    holds_units: bool

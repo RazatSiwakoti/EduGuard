@@ -38,10 +38,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.core.dependencies import require_role
+from app.core.dependencies import require_teaching_role
 from app.database import get_db
 from app.models.enrollment import Enrollment
-from app.models.enums import UserRole
 from app.models.unit import Unit
 from app.models.user import User
 from app.schemas.analysis import AnalysisRunResult, UnitAnalysisResult
@@ -57,7 +56,7 @@ logger = logging.getLogger("eduguard.analysis")
 router = APIRouter(
     prefix="/lecturer/analysis",
     tags=["Lecturer - Analysis"],
-    dependencies=[Depends(require_role(UserRole.LECTURER))],
+    dependencies=[Depends(require_teaching_role())],
 )
 
 
@@ -139,7 +138,7 @@ def run_analysis(
     ),
     checkpoint_week: Optional[int] = Query(None, ge=1, le=52),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.LECTURER)),
+    current_user: User = Depends(require_teaching_role()),
 ) -> AnalysisRunResult:
     """
     Recompute rule + ML + hybrid for a unit, or for all of them.
@@ -232,7 +231,7 @@ def run_analysis(
 def preview_analysis_scope(
     unit_id: Optional[int] = Query(None, ge=1),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.LECTURER)),
+    current_user: User = Depends(require_teaching_role()),
 ) -> list[UnitAnalysisResult]:
     """
     What a run WOULD cover, without running anything.

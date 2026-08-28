@@ -6,9 +6,8 @@ hybrid reconciliation land in later steps of this phase.
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.core.dependencies import require_role
+from app.core.dependencies import require_teaching_role
 from app.database import get_db
-from app.models.enums import UserRole
 from app.models.unit import Unit
 from app.models.student import Student
 from app.models.user import User
@@ -57,7 +56,7 @@ def compute_rule_based_risk_score(
     student_id: int,
     checkpoint_week: int = 8,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.LECTURER)),
+    current_user: User = Depends(require_teaching_role()),
 ):
     unit = _get_unit_or_404(db, unit_id)
     _get_student_or_404(db, student_id)
@@ -88,7 +87,7 @@ def compute_ml_based_risk_score(
     student_id: int,
     checkpoint_week: int = 8,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.LECTURER)),
+    current_user: User = Depends(require_teaching_role()),
 ):
     unit = _get_unit_or_404(db, unit_id)
     _get_student_or_404(db, student_id)
@@ -118,7 +117,7 @@ def compute_final_verdict(
     student_id: int,
     checkpoint_week: int = 8,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.LECTURER)),
+    current_user: User = Depends(require_teaching_role()),
 ):
     unit = _get_unit_or_404(db, unit_id)
     _get_student_or_404(db, student_id)
@@ -153,7 +152,7 @@ def run_analysis(
     unit_id: int,
     checkpoint_week: int = 8,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.LECTURER)),
+    current_user: User = Depends(require_teaching_role()),
 ):
     """The 'Run Analysis' refresh button - recomputes rule + ML + hybrid
     for every currently enrolled student in this unit, using whatever
@@ -181,7 +180,7 @@ def run_analysis(
 def list_pending_reviews(
     unit_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.LECTURER)),
+    current_user: User = Depends(require_teaching_role()),
 ):
     unit = _get_unit_or_404(db, unit_id)
     _require_assigned_lecturer(unit, current_user)
@@ -210,7 +209,7 @@ def review_verdict(
     verdict_id: int,
     payload: VerdictReviewSubmit,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.LECTURER)),
+    current_user: User = Depends(require_teaching_role()),
 ):
     unit = _get_unit_or_404(db, unit_id)
     _require_assigned_lecturer(unit, current_user)

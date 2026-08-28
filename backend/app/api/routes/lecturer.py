@@ -16,9 +16,8 @@ opened or refreshed.
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from sqlalchemy.orm import Session
 
-from app.core.dependencies import require_role
+from app.core.dependencies import require_teaching_role
 from app.database import get_db
-from app.models.enums import UserRole
 from app.models.user import User
 from app.schemas.dashboard import DashboardUnit, LecturerDashboardResponse
 from app.services.dashboard_service import (
@@ -42,7 +41,7 @@ from app.services.student_detail_service import (
 router = APIRouter(
     prefix="/lecturer",
     tags=["Lecturer - Dashboard"],
-    dependencies=[Depends(require_role(UserRole.LECTURER))],
+    dependencies=[Depends(require_teaching_role())],
 )
 
 
@@ -57,7 +56,7 @@ def read_lecturer_dashboard(
         "analysis needs no API change later.",
     ),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.LECTURER)),
+    current_user: User = Depends(require_teaching_role()),
 ):
     """
     Everything the analytics dashboard needs, in one request: the
@@ -77,7 +76,7 @@ def read_lecturer_dashboard(
 @router.get("/units", response_model=list[DashboardUnit])
 def read_lecturer_units(
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.LECTURER)),
+    current_user: User = Depends(require_teaching_role()),
 ):
     """
     Just the units this lecturer is assigned to - no cohort, no scores.
@@ -107,7 +106,7 @@ def read_student_detail(
     ),
     checkpoint_week: int = Query(default=DEFAULT_CHECKPOINT_WEEK, ge=1, le=52),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.LECTURER)),
+    current_user: User = Depends(require_teaching_role()),
 ):
     """
     Everything the student card renders, in one request.
@@ -140,7 +139,7 @@ def update_student_note(
     student_id: int = Path(..., ge=1),
     unit_id: int = Query(..., ge=1),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.LECTURER)),
+    current_user: User = Depends(require_teaching_role()),
 ):
     """
     Saves the requesting lecturer's own notes about this student.
@@ -177,7 +176,7 @@ def review_student_verdict(
     unit_id: int = Query(..., ge=1),
     checkpoint_week: int = Query(default=DEFAULT_CHECKPOINT_WEEK, ge=1, le=52),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.LECTURER)),
+    current_user: User = Depends(require_teaching_role()),
 ):
     """
     Records this lecturer's decision on an engine disagreement.

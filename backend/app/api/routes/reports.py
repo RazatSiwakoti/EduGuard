@@ -29,9 +29,8 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response
 from sqlalchemy.orm import Session
 
-from app.core.dependencies import require_role
+from app.core.dependencies import require_teaching_role
 from app.database import get_db
-from app.models.enums import UserRole
 from app.models.user import User
 from app.schemas.reports import ReportCheckpoint, ReportResponse
 from app.services.report_pdf import build_report_pdf, report_filename
@@ -44,7 +43,7 @@ from app.services.report_service import (
 router = APIRouter(
     prefix="/lecturer/reports",
     tags=["Lecturer - Reports"],
-    dependencies=[Depends(require_role(UserRole.LECTURER))],
+    dependencies=[Depends(require_teaching_role())],
 )
 
 
@@ -63,7 +62,7 @@ def get_unit_report(
         ),
     ),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.LECTURER)),
+    current_user: User = Depends(require_teaching_role()),
 ) -> ReportResponse:
     """
     The complete report for one unit at one checkpoint.
@@ -93,7 +92,7 @@ def download_unit_report(
     unit_id: int = Path(..., ge=1, description="Unit the report is about."),
     checkpoint_week: Optional[int] = Query(None, ge=1, le=52),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.LECTURER)),
+    current_user: User = Depends(require_teaching_role()),
 ) -> Response:
     """
     The same report, as a downloadable PDF.
@@ -138,7 +137,7 @@ def download_unit_report(
 def list_unit_checkpoints(
     unit_id: int = Path(..., ge=1),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.LECTURER)),
+    current_user: User = Depends(require_teaching_role()),
 ) -> list[ReportCheckpoint]:
     """
     The checkpoint weeks this unit has actually been analysed at.

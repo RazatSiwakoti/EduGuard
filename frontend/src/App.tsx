@@ -44,9 +44,21 @@ function App() {
         <Route path="/account" element={<AccountPage />} />
         <Route path="/settings" element={<SettingsPage />} />
 
-        {/* Lecturer workspace. Dashboard is live; the rest are routed
-            placeholders so the navigation is complete and no sidebar
-            item is a dead link. */}
+        {/* Lecturer workspace — GATED since T5.
+            It used to be ungated: any signed-in account could type
+            /dashboard and get a page whose every request 403'd, with
+            the sidebar as the only thing keeping them out. Now the
+            surface is guarded by the same predicate that decides the
+            sidebar, so the two can never disagree.
+
+            allowedRoles includes "admin" because an admin who holds a
+            unit teaches it; requireTeaching is what stops an admin who
+            holds none from getting in on the role alone. */}
+        <Route
+          element={
+            <RoleRoute allowedRoles={["lecturer", "admin"]} requireTeaching />
+          }
+        >
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/units" element={<UnitsPage />} />
 
@@ -65,6 +77,7 @@ function App() {
         <Route path="/students" element={<StudentsPage />} />
         <Route path="/alerts" element={<AlertsPage />} />
         <Route path="/reports" element={<ReportsPage />} />
+        </Route>
 
         {/* Role-gated sections. The nested RoleRoute adds the check
             without re-rendering the shell around it. */}

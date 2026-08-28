@@ -19,6 +19,7 @@ from app.models.unit import Unit
 from app.models.enums import UserRole
 from app.schemas.unit import UnitCreate, UnitUpdate, UnitAssignLecturer, UnitOut
 from app.core.dependencies import require_role
+from app.core.teaching import TEACHING_ROLES
 from app.core.system_accounts import PLACEHOLDER_USER_EMAIL
 from app.services import unit_service
 
@@ -36,21 +37,40 @@ def _get_unit_or_404(db: Session, unit_id: int) -> Unit:
     return unit
 
 
-def _get_lecturer_or_404(db: Session, lecturer_id: int) -> User:
-    """Mirrors app.api.routes.admin's version - a real, non-placeholder
-    Lecturer must exist before a unit can be assigned to them."""
-    lecturer = (
+def _get_assignable_teacher_or_404(db: Session, user_id: int) -> User:
+    """
+    A real, non-placeholder account that may HOLD a unit.
+
+    Widened in T5 from `role == LECTURER` to LECTURER or ADMIN, so an
+    admin can be assigned a unit and become "also a lecturer".
+
+    NOT the same function as app.api.routes.admin._get_lecturer_or_404,
+    despite the near-identical body, and the two must NOT be merged.
+    That one resolves the TARGET of lecturer account management -
+    deactivate, reactivate, delete. Widening it to ADMIN would hand
+    every admin a `DELETE /admin/lecturers/{id}` that deletes other
+    admins, which is Super Admin's job and nobody else's. The
+    duplication is the boundary; this docstring is why it stays.
+
+    Deactivated accounts are deliberately still assignable: a unit
+    outlives a staff account being switched off for a semester, and
+    refusing the assignment here would leave the unit orphaned instead.
+    """
+    teacher = (
         db.query(User)
         .filter(
-            User.id == lecturer_id,
-            User.role == UserRole.LECTURER,
+            User.id == user_id,
+            User.role.in_(TEACHING_ROLES),
             User.email != PLACEHOLDER_USER_EMAIL,
         )
         .first()
     )
-    if not lecturer:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lecturer not found")
-    return lecturer
+    if not teacher:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No lecturer or admin account with that id",
+        )
+    return teacher
 
 
 # -------------------------
@@ -85,7 +105,7 @@ def create_unit(payload: UnitCreate, db: Session = Depends(get_db)):
     )
 
     if payload.lecturer_id is not None:
-        _get_lecturer_or_404(db, payload.lecturer_id)
+        _get_assignable_teacher_or_404(db, payload.lecturer_id)
         unit_service.assign_lecturer(db, new_unit, payload.lecturer_id)
 
     db.add(new_unit)
@@ -139,7 +159,7 @@ def update_unit(unit_id: int, payload: UnitUpdate, db: Session = Depends(get_db)
 @router.patch("/{unit_id}/assign-lecturer", response_model=UnitOut)
 def assign_lecturer_to_unit(unit_id: int, payload: UnitAssignLecturer, db: Session = Depends(get_db)):
     unit = _get_unit_or_404(db, unit_id)
-    _get_lecturer_or_404(db, payload.lecturer_id)
+    _get_assignable_teacher_or_404(db, payload.lecturer_id)
 
     unit_service.assign_lecturer(db, unit, payload.lecturer_id)
     db.commit()

@@ -1,19 +1,25 @@
-import type { UserRole } from "../types/auth";
+import type { User } from "../types/auth";
+import { usesLecturerSurface } from "./teaching";
 
-// Central place mapping each role to its landing page after login.
-// Add a case here whenever a new role-specific dashboard is built —
-// keeps this logic in one spot instead of duplicated across pages.
-export function getRedirectPath(role: UserRole): string {
-  switch (role) {
-    case "super_admin":
-      return "/super-admin";
-    case "admin":
-      return "/admin"; // placeholder until AdminDashboard exists
-    case "lecturer":
-      return "/dashboard"; // placeholder until LecturerDashboard exists
-    case "student":
-      return "/dashboard"; // placeholder until StudentDashboard exists
-    default:
-      return "/dashboard";
-  }
+/**
+ * Where a signed-in account belongs.
+ *
+ * Takes the whole USER, not just the role — since T5 the answer for an
+ * admin depends on whether they hold a unit, and a role string cannot
+ * carry that.
+ *
+ * Order matters. super_admin is checked first because it is the only
+ * role with a landing page of its own that is not the lecturer surface
+ * and not /admin.
+ */
+export function getRedirectPath(user: User): string {
+  if (user.role === "super_admin") return "/super-admin";
+
+  // Lecturers, and admins who hold a unit, land on the risk dashboard —
+  // the reason either of them signed in.
+  if (usesLecturerSurface(user)) return "/dashboard";
+
+  // Everyone left is an admin with no units: the admin panel is their
+  // whole application.
+  return "/admin";
 }

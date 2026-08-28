@@ -14,6 +14,7 @@ import { useLecturersList } from "../hooks/useLecturers";
 import CriteriaStatusCell from "./units/CriteriaStatusCell";
 import CriteriaSetupDialog from "./units/CriteriaSetupDialog";
 import type { Unit } from "../types/unit";
+import { useAuth } from "../context/AuthContext";
 
 export default function UnitsPanel() {
   const [showInactive, setShowInactive] = useState(false);
@@ -29,6 +30,39 @@ export default function UnitsPanel() {
 
   const { data: units, isLoading, isError } = useUnitsList(showInactive);
   const { data: lecturers } = useLecturersList(false); // active lecturers only
+  const { user } = useAuth();
+
+  /**
+  * The unit-holder options, T5.
+   *
+   * `GET /admin/lecturers` returns LECTURER accounts only, by design —
+   * it is the lecturer ACCOUNT listing and widening it would hand every
+   * admin a Deactivate and a Delete button pointed at their colleagues.
+   +   * a unit holder and there would be no way in the browser to make it
+   +   * happen: T5's entire premise, unreachable.
+   +   *
+   +   * Only YOURSELF, and only if you are an admin. Assigning a unit to a
+   +   * DIFFERENT admin would need an admin-visible listing of admins, and
+   +   * the only one that exists is Super Admin's. That is a feature with a
+   +   * permission question attached, not a dropdown entry.
+   +   */
+
+  const selfHolderOption = 
+    user?.role === "admin" ? (
+      <optgroup label="Administrators">
+        <option value={user.id}>{user.full_name} (you)</option>
+      </optgroup>
+   ) : null;
+
+  const lecturerOptions = (
+    <optgroup label="Lecturers">
+      {lecturers?.map((l) => (
+        <option key={l.id} value={l.id}>
+          {l.full_name}
+        </option>
+      ))}
+    </optgroup>
+  );
 
   const createUnit = useCreateUnit();
   const updateUnit = useUpdateUnit();
@@ -102,7 +136,7 @@ export default function UnitsPanel() {
             Manage Units
           </h2>
           <p className="mt-0.5 text-sm text-stone-500">
-            Create units, assign lecturers, archive when no longer offered
+            Create units, assign who teaches them, archive when no longer offered
           </p>
         </div>
         <button
@@ -343,11 +377,9 @@ export default function UnitsPanel() {
                     className="w-full rounded border border-stone-300 px-3 py-2 text-sm outline-none focus:border-stone-500"
                   >
                     <option value="">Unassigned</option>
-                    {lecturers?.map((l) => (
-                      <option key={l.id} value={l.id}>
-                        {l.full_name}
-                      </option>
-                    ))}
+                    {selfHolderOption }
+                    {lecturerOptions}                  
+                    
                   </select>
                 </div>
               </div>
@@ -451,12 +483,12 @@ export default function UnitsPanel() {
           <Dialog.Overlay className="fixed inset-0 bg-black/30" />
           <Dialog.Content className="fixed left-1/2 top-1/2 w-full max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-md bg-white p-6 shadow-lg">
             <Dialog.Title className="text-base font-semibold text-stone-900">
-              Assign Lecturer to {assignTarget?.unit_code}
+              Assign {assignTarget?.unit_code}
             </Dialog.Title>
             <form onSubmit={handleAssignSubmit} className="mt-4 space-y-3">
               <div>
                 <label className="mb-1 block text-sm font-medium text-stone-700">
-                  Lecturer
+                  Teaching this unit
                 </label>
                 <select
                   name="lecturer_id"
@@ -465,13 +497,10 @@ export default function UnitsPanel() {
                   className="w-full rounded border border-stone-300 px-3 py-2 text-sm outline-none focus:border-stone-500"
                 >
                   <option value="" disabled>
-                    Select a lecturer
+                    Select who will teach this unit
                   </option>
-                  {lecturers?.map((l) => (
-                    <option key={l.id} value={l.id}>
-                      {l.full_name}
-                    </option>
-                  ))}
+                  {selfHolderOption}
+                  {lecturerOptions}
                 </select>
               </div>
               <div className="flex justify-end gap-2 pt-2">

@@ -6,11 +6,10 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Path, Qu
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.dependencies import require_role
+from app.core.dependencies import require_teaching_role
 from app.database import SessionLocal, get_db
 from app.models.email_message import EmailMessage
 from app.models.email_template import EmailTemplate
-from app.models.enums import UserRole
 from app.models.student import Student
 from app.models.unit import Unit
 from app.models.user import User
@@ -23,7 +22,7 @@ from app.services import alert_service as alerts
 from app.services.email_backend import ConsoleBackend, get_email_backend
 from app.services.email_render import PLACEHOLDERS, render, unknown_placeholders
 
-router = APIRouter(prefix="/lecturer/alerts", tags=["Lecturer - Alerts"], dependencies=[Depends(require_role(UserRole.LECTURER))])
+router = APIRouter(prefix="/lecturer/alerts", tags=["Lecturer - Alerts"], dependencies=[Depends(require_teaching_role())])
 
 
 def _my_units(db, lecturer_id):
@@ -49,7 +48,7 @@ def _queue_item(row):
 
 
 @router.get("/summary", response_model=AlertSummary)
-def read_summary(db: Session = Depends(get_db), current_user: User = Depends(require_role(UserRole.LECTURER))):
+def read_summary(db: Session = Depends(get_db), current_user: User = Depends(require_teaching_role())):
     statuses = db.execute(select(EmailMessage.status).where(EmailMessage.lecturer_id == current_user.id)).scalars().all()
     backend = get_email_backend()
     console = isinstance(backend, ConsoleBackend)
@@ -57,7 +56,7 @@ def read_summary(db: Session = Depends(get_db), current_user: User = Depends(req
 
 
 @router.get("/queue", response_model=AlertQueue)
-def read_queue(unit_id: Optional[int] = Query(default=None, ge=1), db: Session = Depends(get_db), current_user: User = Depends(require_role(UserRole.LECTURER))):
+def read_queue(unit_id: Optional[int] = Query(default=None, ge=1), db: Session = Depends(get_db), current_user: User = Depends(require_teaching_role())):
     units = _my_units(db, current_user.id)
     if unit_id is not None:
         units = [unit for unit in units if unit.id == unit_id]
@@ -78,7 +77,7 @@ def read_queue(unit_id: Optional[int] = Query(default=None, ge=1), db: Session =
 
 
 @router.get("/log", response_model=AlertLogPage)
-def read_log(status: Optional[str] = Query(default=None), search: Optional[str] = Query(default=None), page: int = Query(default=1, ge=1), page_size: int = Query(default=20, ge=1, le=100), db: Session = Depends(get_db), current_user: User = Depends(require_role(UserRole.LECTURER))):
+def read_log(status: Optional[str] = Query(default=None), search: Optional[str] = Query(default=None), page: int = Query(default=1, ge=1), page_size: int = Query(default=20, ge=1, le=100), db: Session = Depends(get_db), current_user: User = Depends(require_teaching_role())):
     stmt = select(EmailMessage).where(EmailMessage.lecturer_id == current_user.id)
     if status in ("sent", "failed", "queued"):
         stmt = stmt.where(EmailMessage.status == status)
@@ -107,7 +106,7 @@ def _prepare(db, lecturer, payload):
 
 
 @router.post("/preview", response_model=PreviewOut)
-def preview_alert(payload: SendRequest, db: Session = Depends(get_db), current_user: User = Depends(require_role(UserRole.LECTURER))):
+def preview_alert(payload: SendRequest, db: Session = Depends(get_db), current_user: User = Depends(require_teaching_role())):
     row, template, unit = _prepare(db, current_user, payload)
     if unit is None or row is None:
         raise HTTPException(status_code=404, detail="No such student in a unit you teach.")
@@ -119,7 +118,7 @@ def preview_alert(payload: SendRequest, db: Session = Depends(get_db), current_u
 
 
 @router.post("/send", response_model=SendResult)
-def send_alert(payload: SendRequest, db: Session = Depends(get_db), current_user: User = Depends(require_role(UserRole.LECTURER))):
+def send_alert(payload: SendRequest, db: Session = Depends(get_db), current_user: User = Depends(require_teaching_role())):
     row, template, unit = _prepare(db, current_user, payload)
     if unit is None or row is None:
         raise HTTPException(status_code=404, detail="No such student in a unit you teach.")
@@ -134,7 +133,7 @@ def send_alert(payload: SendRequest, db: Session = Depends(get_db), current_user
 
 
 @router.post("/send-bulk", response_model=SendResult)
-def send_alerts_bulk(payload: BulkSendRequest, background: BackgroundTasks, db: Session = Depends(get_db), current_user: User = Depends(require_role(UserRole.LECTURER))):
+def send_alerts_bulk(payload: BulkSendRequest, background: BackgroundTasks, db: Session = Depends(get_db), current_user: User = Depends(require_teaching_role())):
     result = SendResult(queued=0, sent=0, failed=0, skipped={})
     for item in payload.items:
         row, template, unit = _prepare(db, current_user, item)
@@ -161,7 +160,7 @@ def read_placeholders():
 
 
 @router.get("/templates", response_model=list[TemplateOut])
-def read_templates(db: Session = Depends(get_db), current_user: User = Depends(require_role(UserRole.LECTURER))):
+def read_templates(db: Session = Depends(get_db), current_user: User = Depends(require_teaching_role())):
     alerts.ensure_system_templates(db)
     rows = db.execute(select(EmailTemplate).where((EmailTemplate.lecturer_id == current_user.id) | EmailTemplate.is_system.is_(True)).order_by(EmailTemplate.is_system.desc(), EmailTemplate.risk_tier, EmailTemplate.name)).scalars().all()
     return [TemplateOut(id=row.id, name=row.name, risk_tier=row.risk_tier, subject=row.subject, body=row.body, is_system=row.is_system, updated_at=row.updated_at) for row in rows]
@@ -178,7 +177,7 @@ def _template_out(template):
 
 
 @router.post("/templates", response_model=TemplateOut, status_code=201)
-def create_template(payload: TemplateSave, db: Session = Depends(get_db), current_user: User = Depends(require_role(UserRole.LECTURER))):
+def create_template(payload: TemplateSave, db: Session = Depends(get_db), current_user: User = Depends(require_teaching_role())):
     _reject_unknown_placeholders(payload)
     template = EmailTemplate(lecturer_id=current_user.id, name=payload.name.strip(), risk_tier=payload.risk_tier, subject=payload.subject.strip(), body=payload.body, is_system=False)
     db.add(template); db.commit(); db.refresh(template)
@@ -186,7 +185,7 @@ def create_template(payload: TemplateSave, db: Session = Depends(get_db), curren
 
 
 @router.put("/templates/{template_id}", response_model=TemplateOut)
-def update_template(payload: TemplateSave, template_id: int = Path(..., ge=1), db: Session = Depends(get_db), current_user: User = Depends(require_role(UserRole.LECTURER))):
+def update_template(payload: TemplateSave, template_id: int = Path(..., ge=1), db: Session = Depends(get_db), current_user: User = Depends(require_teaching_role())):
     template = db.get(EmailTemplate, template_id)
     if template is None or (not template.is_system and template.lecturer_id != current_user.id):
         raise HTTPException(status_code=404, detail="No such template.")
@@ -199,7 +198,7 @@ def update_template(payload: TemplateSave, template_id: int = Path(..., ge=1), d
 
 
 @router.delete("/templates/{template_id}", status_code=204)
-def delete_template(template_id: int = Path(..., ge=1), db: Session = Depends(get_db), current_user: User = Depends(require_role(UserRole.LECTURER))):
+def delete_template(template_id: int = Path(..., ge=1), db: Session = Depends(get_db), current_user: User = Depends(require_teaching_role())):
     template = db.get(EmailTemplate, template_id)
     if template is None or (not template.is_system and template.lecturer_id != current_user.id):
         raise HTTPException(status_code=404, detail="No such template.")
@@ -209,7 +208,7 @@ def delete_template(template_id: int = Path(..., ge=1), db: Session = Depends(ge
 
 
 @router.post("/run-sweep", response_model=SendResult)
-def run_sweep_now(background: BackgroundTasks, db: Session = Depends(get_db), current_user: User = Depends(require_role(UserRole.LECTURER))):
+def run_sweep_now(background: BackgroundTasks, db: Session = Depends(get_db), current_user: User = Depends(require_teaching_role())):
     summary = alerts.sweep_units(db, alerts.active_units(db, current_user.id))
     background.add_task(_drain_in_background)
     return SendResult(queued=summary["queued"], sent=0, failed=0, skipped=summary["skipped"])

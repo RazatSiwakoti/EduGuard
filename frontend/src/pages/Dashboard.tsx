@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
 import { CircleAlert, LayoutDashboard, RefreshCw } from "lucide-react";
-import { useAuth } from "../context/AuthContext";
 import { useLecturerDashboard } from "../hooks/useDashboard";
 import type { DashboardFilters, RiskBucket } from "../types/dashboard";
 import {
@@ -44,7 +43,6 @@ import RunAnalysisButton from "../components/analysis/RunAnalysisButton";
  * Initial state is "All units, all risk levels", as specified.
  */
 export default function Dashboard() {
-  const { user } = useAuth();
   const { data, isLoading, isError, error, refetch, isFetching } = useLecturerDashboard();
 
   const [filters, setFilters] = useState<DashboardFilters>({
@@ -96,19 +94,7 @@ export default function Dashboard() {
   }, [allStudents, units, filters]);
 
   /* ---------------- Guards and non-happy paths ---------------- */
-
-  // /dashboard is not role-restricted in the router, so an admin or
-  // super admin can land here. The API is lecturer-only and would
-  // return 403, which reads to the user as a broken page. Explain it
-  // instead of showing an error.
-  if (user && user.role !== "lecturer") {
-    return (
-      <StatusPanel
-        title="Lecturer dashboard"
-        message="This dashboard shows the cohort for units you are assigned to teach, so it is only available to lecturer accounts."
-      />
-    );
-  }
+ 
 
   if (isLoading) {
     return (
@@ -162,8 +148,6 @@ export default function Dashboard() {
               {allStudents.length === 1 ? "" : "s"}
             </p>
           </div>
-
-----------------------
 
 
           <div className="flex flex-wrap items-center gap-2">

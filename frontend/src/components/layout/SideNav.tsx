@@ -11,6 +11,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import type { UserRole } from "../../types/auth";
+import { usesLecturerSurface } from "../../utils/teaching";
 
 interface NavItem {
   to: string;
@@ -18,6 +19,19 @@ interface NavItem {
   icon: LucideIcon;
   /** Which roles see this item. Omitted = every signed-in role. */
   roles?: UserRole[];
+  /**
+   * Hide this item unless the account actually uses the lecturer
+   * surface — T5.
+   *
+   * A role list alone cannot express the rule. Every lecturer item is
+   * now visible to `admin` as well, because an admin who holds a unit
+   * teaches it; but an admin who holds none must not see any of them,
+   * and role is identical in both cases. This flag carries the
+   * difference.
+   */
+  requiresTeaching?: boolean;
+  /** Renders above the item, once, as a group label. */
+  group?: string;
 }
 
 /**
@@ -31,33 +45,60 @@ interface NavItem {
  * dashboard is the reason they logged in, units is where they upload
  * and configure, and the rest are follow-up actions.
  */
+const TEACHING: UserRole[] = ["lecturer", "admin"];
+
 const NAV_ITEMS: NavItem[] = [
   {
     to: "/dashboard",
     label: "Dashboard",
     icon: LayoutDashboard,
-    roles: ["lecturer"],
+    roles: TEACHING,
+    requiresTeaching: true,
+    group: "Teaching",
   },
-  { to: "/units", label: "Units", icon: BookOpen, roles: ["lecturer"] },
+  {
+    to: "/units",
+    label: "Units",
+    icon: BookOpen,
+    roles: TEACHING,
+    requiresTeaching: true,
+  },
   {
     to: "/students",
     label: "Students",
     icon: Users,
-    roles: ["lecturer"],
+    roles: TEACHING,
+    requiresTeaching: true,
   },
   {
     to: "/alerts",
     label: "Alerts",
     icon: BellRing,
-    roles: ["lecturer"],
+    roles: TEACHING,
+    requiresTeaching: true,
   },
   // Built in 7.9 / section C3 - the "Soon" tag goes with it, or the
   // sidebar keeps advertising a stub that no longer exists.
-  { to: "/reports", label: "Reports", icon: FileBarChart, roles: ["lecturer"] },
+  {
+    to: "/reports",
+    label: "Reports",
+    icon: FileBarChart,
+    roles: TEACHING,
+    requiresTeaching: true,
+  },
   // Admin and super admin keep their existing single-page panels; they
   // appear here so those roles get a working sidebar too rather than an
   // empty rail.
-  { to: "/admin", label: "Admin Panel", icon: UsersRound, roles: ["admin"] },
+  //
+  // No `requiresTeaching`: this is the item an admin must ALWAYS see,
+  // and for an admin with no units it is the only item in the rail.
+  {
+    to: "/admin",
+    label: "Admin Panel",
+    icon: UsersRound,
+    roles: ["admin"],
+    group: "Administration",
+  },
   {
     to: "/super-admin",
     label: "Super Admin",
@@ -81,9 +122,22 @@ export default function SideNav() {
   const { user } = useAuth();
   if (!user) return null;
 
-  const items = NAV_ITEMS.filter(
-    (item) => !item.roles || item.roles.includes(user.role),
-  );
+  // Computed once, not per item: the answer is the same for every row
+  // and it is what separates a teaching admin from a desk admin.
+  const teaches = usesLecturerSurface(user);
+
+  const items = NAV_ITEMS.filter((item) => {
+    if (item.roles && !item.roles.includes(user.role)) return false;
+    if (item.requiresTeaching && !teaches) return false;
+    return true;
+  });
+
+  // Group labels only earn their space when there is more than one
+  // group on screen. A plain lecturer sees five items under a redundant
+  // "Teaching" heading otherwise, and a desk admin sees "Administration"
+  // above a single row.
+  const showGroups =
+    new Set(items.map((item) => item.group).filter(Boolean)).size > 1;
 
   return (
     <aside className="flex w-16 shrink-0 flex-col border-r border-stone-200 bg-white lg:w-60">
@@ -104,8 +158,13 @@ export default function SideNav() {
           const Icon = item.icon;
 
           return (
+            <div key={item.to}>
+              {showGroups && item.group && (
+                <p className="mt-3 px-3 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-wider text-stone-400 first:mt-0 max-lg:sr-only">
+                  {item.group}
+                </p>
+              )}
             <NavLink
-              key={item.to}
               to={item.to}
               title={item.label}
               // NavLink hands us the active state, so the current
@@ -122,6 +181,7 @@ export default function SideNav() {
               <Icon className="h-4.5 w-4.5 shrink-0" aria-hidden="true" />
               <span className="hidden lg:inline">{item.label}</span>
             </NavLink>
+            </div>
           );
         })}
       </nav>

@@ -13,6 +13,18 @@ interface AuthContextType {
   isLoading: boolean;
   login: (accessToken: string) => Promise<User>;
   logout: () => void;
+  /**
+   * Re-reads GET /auth/me for the account already signed in — T5.
+   *
+   * `holds_units` decides whether the lecturer navigation is on screen,
+   * and it changes from the ADMIN panel: an admin assigns themselves a
+   * unit and is, from that moment, also a lecturer. Without this the
+   * sidebar would keep its pre-assignment shape until the token expired
+   * or they signed out and back in, and the fix would look like "log
+   * out and in again", which is the kind of instruction that ends up in
+   * a user manual instead of in the code.
+   */
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -53,13 +65,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return currentUser;
   }
 
+  // Deliberately silent on failure. This runs after a mutation that
+  // already succeeded, so an admin who assigned a lecturer must not be
+  // shown an error because a follow-up read failed; the sidebar simply
+  // stays as it was until the next load.
+  async function refreshUser(): Promise<void> {
+    if (!localStorage.getItem("access_token")) return;
+    try {
+      setUser(await getCurrentUser());
+    } catch {
+      // keep the current user rather than signing them out
+    }
+  }
+
   function logout() {
     localStorage.removeItem("access_token");
     setUser(null);
   }
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, logout }}>
+    <AuthContext.Provider value={{ user, isLoading, login, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

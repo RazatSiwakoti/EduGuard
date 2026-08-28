@@ -21,7 +21,7 @@ export default function Login() {
     try {
         const { access_token } = await loginRequest ({ email, password });
         const loggedInUser = await login(access_token);
-        navigate(getRedirectPath(loggedInUser.role));
+        navigate(getRedirectPath(loggedInUser));
     
 
 

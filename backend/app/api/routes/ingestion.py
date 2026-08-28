@@ -17,9 +17,8 @@ import pandas as pd
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 from app.services.analysis_service import run_analysis_for_students, run_analysis_for_student
-from app.core.dependencies import require_role
+from app.core.dependencies import require_teaching_role
 from app.database import get_db
-from app.models.enums import UserRole
 from app.models.unit import Unit
 from app.models.user import User
 from app.schemas.ingestion import (
@@ -112,7 +111,7 @@ async def preview_upload(
     file: UploadFile = File(...),
     sample_size: int = 5,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.LECTURER)),
+    current_user: User = Depends(require_teaching_role()),
 ):
     """
     Reads an uploaded file and reports its column headers plus a few
@@ -169,7 +168,7 @@ async def bulk_ingest(
     file: UploadFile = File(...),
     mapping: str = Form(..., description="BulkIngestionMapping as a JSON string"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.LECTURER)),
+    current_user: User = Depends(require_teaching_role()),
 ):
     unit = _get_unit_or_404(db, unit_id)
     _require_assigned_lecturer(unit, current_user)
@@ -247,7 +246,7 @@ def manual_ingest(
     unit_id: int,
     payload: ManualEntryCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.LECTURER)),
+    current_user: User = Depends(require_teaching_role()),
 ):
     unit = _get_unit_or_404(db, unit_id)
     _require_assigned_lecturer(unit, current_user)

@@ -29,10 +29,10 @@ analysis has produced verdicts. Renames stay allowed in both lives.
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.core.dependencies import require_role
+from app.core.dependencies import require_role, require_teaching_role
+from app.models.enums import UserRole
 from app.database import get_db
 from app.models.criteria import Criteria
-from app.models.enums import UserRole
 from app.models.unit import Unit
 from app.models.user import User
 from app.schemas.criteria import (
@@ -168,7 +168,7 @@ def update_unit_thresholds(
     unit_id: int,
     payload: ThresholdUpdateIn,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.LECTURER)),
+    current_user: User = Depends(require_teaching_role()),
 ):
     """
     Move the pass bar for one or both adjustable categories.
@@ -215,7 +215,7 @@ def create_criteria(
     unit_id: int,
     payload: CriteriaCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.LECTURER)),
+    current_user: User = Depends(require_teaching_role()),
 ):
     unit = _get_unit_or_404(db, unit_id)
     _require_assigned_lecturer(unit, current_user)
@@ -244,7 +244,7 @@ def create_criteria(
 def list_criteria(
     unit_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.LECTURER)),
+    current_user: User = Depends(require_teaching_role()),
 ):
     unit = _get_unit_or_404(db, unit_id)
     _require_assigned_lecturer(unit, current_user)
@@ -257,7 +257,7 @@ def get_criteria(
     unit_id: int,
     criteria_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.LECTURER)),
+    current_user: User = Depends(require_teaching_role()),
 ):
     unit = _get_unit_or_404(db, unit_id)
     _require_assigned_lecturer(unit, current_user)
@@ -270,7 +270,7 @@ def update_criteria(
     criteria_id: int,
     payload: CriteriaUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.LECTURER)),
+    current_user: User = Depends(require_teaching_role()),
 ):
     unit = _get_unit_or_404(db, unit_id)
     _require_assigned_lecturer(unit, current_user)
@@ -323,7 +323,7 @@ def delete_criteria(
     unit_id: int,
     criteria_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.LECTURER)),
+    current_user: User = Depends(require_teaching_role()),
 ):
     unit = _get_unit_or_404(db, unit_id)
     _require_assigned_lecturer(unit, current_user)

@@ -150,7 +150,26 @@ class SmtpBackend:
 
 
 def get_email_backend():
-    """Returns SMTP only for an explicit production environment."""
+    """
+    Chooses the backend from EMAIL_BACKEND, then ENVIRONMENT.
+
+    EMAIL_BACKEND is checked FIRST and ENVIRONMENT second, so an existing
+    deployment that only sets ENVIRONMENT=production keeps sending real
+    mail with no config change. The new key exists because the old rule
+    made "prove SMTP works" and "declare this machine a production
+    system" the same action, and they are not the same action.
+
+    ANYTHING UNRECOGNISED FALLS BACK TO CONSOLE. The failure mode of
+    guessing wrong in one direction is a developer wondering why no mail
+    arrived. In the other direction it is a seeded database of
+    realistic-looking student addresses being emailed for real. Those
+    are not symmetric, so the ambiguous case resolves to the safe one.
+    """
+    choice = (settings.EMAIL_BACKEND or "").strip().lower()
+    if choice == "smtp":
+        return SmtpBackend()
+    if choice == "console":
+        return ConsoleBackend()
     if (settings.ENVIRONMENT or "").strip().lower() == "production":
         return SmtpBackend()
     return ConsoleBackend()

@@ -48,6 +48,7 @@ PLACEHOLDERS: dict[str, str] = {
     "tutorial_pct": "Weekly tutorial completion, or 'not recorded'",
     "assessments_marked": "e.g. '1 of 3', or 'not recorded'",
     "checkpoint_week": "Which checkpoint this reflects, e.g. 8",
+    "acknowledge_url": "The student's one-time link confirming they received this",
 }
 
 _PLACEHOLDER_RE = re.compile(r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}")
@@ -145,6 +146,46 @@ SYSTEM_TEMPLATES: list[dict[str, str]] = [
         ),
     },
 ]
+
+
+# ---------------------------------------------------------------------
+# Acknowledgment footer
+#
+# Design contributed by Aash (branch backend-aash-test,
+# backend_aash_test/email_service.py), rebuilt as plain text.
+#
+# WHY IT IS APPENDED RATHER THAN LIVING IN THE TEMPLATE. {{acknowledge_url}}
+# is a placeholder a lecturer MAY use, so a lecturer who wants the link
+# mid-message can put it there. But a lecturer who writes their own
+# template and never types it would produce an alert with no way to
+# acknowledge - and the feature would fail silently, on exactly the
+# messages someone cared enough to customise. So: use the placeholder if
+# it is present, append this if it is not. The link is a property of the
+# message, not of the wording.
+#
+# WHY THE WORDING MATTERS. "Acknowledge" reads to a student under
+# pressure like agreeing they are failing. Saying plainly that it is a
+# receipt, that it is not an agreement, and that it does not touch their
+# marks is the difference between a link that gets clicked and a link
+# that gets ignored by the students who most need to be reached.
+ACK_MARKER = "/alerts/acknowledge/"
+
+ACK_FOOTER = (
+    "\n\n"
+    "----------------------------------------\n"
+    "Please confirm you received this message:\n"
+    "{url}\n\n"
+    "This records the date and time only. It is a receipt, not an\n"
+    "agreement with anything above, and it does not affect your marks."
+)
+
+
+def ensure_acknowledgement(body: str, url: str) -> str:
+    """Appends the receipt footer unless the body already links to one."""
+    text = body or ""
+    if ACK_MARKER in text:
+        return text
+    return text + ACK_FOOTER.format(url=url)
 
 
 def default_template_for(tier: str) -> Optional[dict[str, str]]:

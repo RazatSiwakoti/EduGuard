@@ -560,9 +560,16 @@ check("no T4 migration was added", not any(
     for f in Path("alembic/versions").glob("*.py")))
 from alembic.config import Config                              # noqa: E402
 from alembic.script import ScriptDirectory                     # noqa: E402
-heads = ScriptDirectory.from_config(Config("alembic.ini")).get_heads()
-check("alembic still has the single T2 head",
-      list(heads) == ["a6b7c8d9e0f1"], str(heads))
+# AMENDED BY PHASE EMAIL - see the note in test_composition_t2.py. T4
+# adds no migration of its own, so what it must prove is that it did not
+# fork the chain, not that the chain stopped growing.
+_script = ScriptDirectory.from_config(Config("alembic.ini"))
+heads = _script.get_heads()
+check("alembic still has exactly one head", len(heads) == 1, str(heads))
+check("...and T2's revision is still reachable from it",
+      "a6b7c8d9e0f1" in {revision.revision for revision in _script.walk_revisions()},
+      str(heads))
+
 
 print("\n" + "=" * 60)
 if failures:

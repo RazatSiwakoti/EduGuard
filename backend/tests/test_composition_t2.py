@@ -710,7 +710,16 @@ from alembic.script import ScriptDirectory                         # noqa: E402
 script = ScriptDirectory.from_config(Config("alembic.ini"))
 heads = script.get_heads()
 check("exactly one head", len(heads) == 1, str(heads))
-check("...and it is T2's", heads[0] == "a6b7c8d9e0f1", str(heads))
+# AMENDED BY PHASE EMAIL. This pinned T2's migration as the tip of the
+# chain, which was true until the acknowledgment migration was added on
+# top of it. What T2 actually needs to guarantee is that the graph has
+# not FORKED and that T2 is still on the path - not that nothing has
+# been built since. Pinning a tip makes every later migration a test
+# failure in an unrelated suite.
+check("exactly one head - the graph has not forked", len(heads) == 1, str(heads))
+check("...and T2's revision is still in the chain",
+      "a6b7c8d9e0f1" in {revision.revision for revision in script.walk_revisions()},
+      str(heads))
 
 print("\n" + "=" * 60)
 if failures:

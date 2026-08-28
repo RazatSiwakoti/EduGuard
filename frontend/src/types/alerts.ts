@@ -9,6 +9,14 @@ export interface AlertCounters {
   sent: number;
   failed: number;
   queued: number;
+  /** Student alerts a student confirmed receiving. */
+  acknowledged: number;
+  /**
+   * Student alerts that were actually sent - the denominator. Queued and
+   * failed messages are excluded, so the ratio never reports a message
+   * that never arrived as a student who ignored it.
+   */
+  acknowledgeable: number;
 }
 
 export interface AlertSummary {
@@ -57,6 +65,7 @@ export interface AlertLogItem {
   attempts: number;
   queued_at: string | null;
   sent_at: string | null;
+  acknowledged_at: string | null;
 }
 
 export interface AlertLogPage {

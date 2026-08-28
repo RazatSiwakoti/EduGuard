@@ -11,6 +11,12 @@ class AlertCounters(BaseModel):
     sent: int
     failed: int
     queued: int
+    # Student alerts a student has confirmed receiving. Counted against
+    # sent, never against total: a lecturer summary can never be
+    # acknowledged, so "3 of 40" against total would be arithmetic that
+    # can never reach 100%.
+    acknowledged: int = 0
+    acknowledgeable: int = 0
 
 
 class AlertSummary(BaseModel):
@@ -59,6 +65,7 @@ class AlertLogItem(BaseModel):
     attempts: int
     queued_at: Optional[datetime] = None
     sent_at: Optional[datetime] = None
+    acknowledged_at: Optional[datetime] = None
 
 
 class AlertLogPage(BaseModel):

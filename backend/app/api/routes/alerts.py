@@ -20,7 +20,12 @@ from app.schemas.alerts import (
 )
 from app.services import alert_service as alerts
 from app.services.email_backend import ConsoleBackend, get_email_backend
-from app.services.email_render import PLACEHOLDERS, render, unknown_placeholders
+from app.services.email_render import (
+    PLACEHOLDERS,
+    ensure_acknowledgement,
+    render,
+    unknown_placeholders,
+)
 
 router = APIRouter(prefix="/lecturer/alerts", tags=["Lecturer - Alerts"], dependencies=[Depends(require_teaching_role())])
 
@@ -49,10 +54,16 @@ def _queue_item(row):
 
 @router.get("/summary", response_model=AlertSummary)
 def read_summary(db: Session = Depends(get_db), current_user: User = Depends(require_teaching_role())):
-    statuses = db.execute(select(EmailMessage.status).where(EmailMessage.lecturer_id == current_user.id)).scalars().all()
+    rows = db.execute(select(EmailMessage.status, EmailMessage.kind, EmailMessage.acknowledged_at).where(EmailMessage.lecturer_id == current_user.id)).all()
+    statuses = [row[0] for row in rows]
+    # The denominator for acknowledgment is student alerts that actually
+    # went out. A queued message has not been offered to anyone yet, and
+    # a failed one never arrived - counting either would make the ratio
+    # report a student's silence as a fact about the student.
+    acknowledgeable = [row for row in rows if row[1] == "student_alert" and row[0] == "sent"]
     backend = get_email_backend()
     console = isinstance(backend, ConsoleBackend)
-    return AlertSummary(counters=AlertCounters(total=len(statuses), sent=statuses.count("sent"), failed=statuses.count("failed"), queued=statuses.count("queued")), unit_count=len(_my_units(db, current_user.id)), checkpoint_week=alerts.DEFAULT_CHECKPOINT_WEEK, dry_run=console, outbox_path=str(backend.outbox) if console else None)
+    return AlertSummary(counters=AlertCounters(total=len(statuses), sent=statuses.count("sent"), failed=statuses.count("failed"), queued=statuses.count("queued"), acknowledged=sum(1 for row in acknowledgeable if row[2] is not None), acknowledgeable=len(acknowledgeable)), unit_count=len(_my_units(db, current_user.id)), checkpoint_week=alerts.DEFAULT_CHECKPOINT_WEEK, dry_run=console, outbox_path=str(backend.outbox) if console else None)
 
 
 @router.get("/queue", response_model=AlertQueue)
@@ -90,7 +101,7 @@ def read_log(status: Optional[str] = Query(default=None), search: Optional[str] 
     for message in rows[(page - 1) * page_size:page * page_size]:
         student = db.get(Student, message.student_id) if message.student_id else None
         unit = db.get(Unit, message.unit_id) if message.unit_id else None
-        items.append(AlertLogItem(id=message.id, kind=message.kind, student_id=message.student_id, student_name=student.name if student else None, student_number=student.student_number if student else None, unit_code=unit.unit_code if unit else None, recipient_email=message.recipient_email, subject=message.subject, body=message.body, template_name=message.template_name, risk_tier=message.risk_tier, trigger=message.trigger, status=message.status, error=message.error, attempts=message.attempts, queued_at=message.queued_at, sent_at=message.sent_at))
+        items.append(AlertLogItem(id=message.id, kind=message.kind, student_id=message.student_id, student_name=student.name if student else None, student_number=student.student_number if student else None, unit_code=unit.unit_code if unit else None, recipient_email=message.recipient_email, subject=message.subject, body=message.body, template_name=message.template_name, risk_tier=message.risk_tier, trigger=message.trigger, status=message.status, error=message.error, attempts=message.attempts, queued_at=message.queued_at, sent_at=message.sent_at, acknowledged_at=message.acknowledged_at))
     return AlertLogPage(items=items, total=len(rows), page=page, page_size=page_size)
 
 
@@ -114,7 +125,14 @@ def preview_alert(payload: SendRequest, db: Session = Depends(get_db), current_u
         raise HTTPException(status_code=400, detail="No template is available for this student's risk level.")
     student = row["student"]
     reason = row["blocked_reason"]
-    return PreviewOut(student_id=student.id, unit_id=unit.id, recipient_email=student.email, recipient_name=student.name, subject=render(template.subject, row["context"]), body=render(template.body, row["context"]), template_id=template.id, template_name=template.name, eligible=row["eligible"], blocked_reason=reason, blocked_detail=alerts.BLOCKED_REASONS.get(reason) if reason else None)
+    # The preview has to render the acknowledgment footer too, using a
+    # clearly fake token. Previewing without it would show the lecturer a
+    # message shorter than the one their student receives - and a preview
+    # that differs from the send is a preview that certifies nothing.
+    # This token is never stored, so the link is inert by construction.
+    context = {**row["context"], "acknowledge_url": alerts.acknowledge_url("preview-link-not-active")}
+    body = ensure_acknowledgement(render(template.body, context), context["acknowledge_url"])
+    return PreviewOut(student_id=student.id, unit_id=unit.id, recipient_email=student.email, recipient_name=student.name, subject=render(template.subject, context), body=body, template_id=template.id, template_name=template.name, eligible=row["eligible"], blocked_reason=reason, blocked_detail=alerts.BLOCKED_REASONS.get(reason) if reason else None)
 
 
 @router.post("/send", response_model=SendResult)

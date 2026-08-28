@@ -1,11 +1,19 @@
-"""Alert eligibility, queueing, dispatch, and weekly sweep services."""
+"""
+Alert eligibility, queueing, dispatch, weekly sweep, and acknowledgment.
 
+The acknowledgment half of this module (token minting, acknowledge())
+is Aash's contribution from branch backend-aash-test, adapted from a
+direct-send design onto this queue.
+"""
+
+import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.models.assessment_event import AssessmentEvent
 from app.models.criteria import Criteria
 from app.models.email_message import EmailMessage
@@ -17,9 +25,20 @@ from app.models.student import Student
 from app.models.unit import Unit
 from app.models.user import User
 from app.services.email_backend import get_email_backend
-from app.services.email_render import SYSTEM_TEMPLATES, render
+from app.services.email_render import (
+    SYSTEM_TEMPLATES,
+    ensure_acknowledgement,
+    render,
+)
 
-DEFAULT_CHECKPOINT_WEEK = 8
+# READ FROM CONFIG, not a literal.
+#
+# CHECKPOINT_WEEK has been a required setting in config.py and a line in
+# .env.example for some time, and until now nothing in the codebase read
+# it - every caller carried its own hardcoded 8. A configured value with
+# no reader is worse than no setting at all, because it tells whoever
+# edits it that they changed something.
+DEFAULT_CHECKPOINT_WEEK = settings.CHECKPOINT_WEEK
 AUTO_ALERT_TIERS = ("high_risk",)
 SUPPRESSION_DAYS = 7
 MAX_ATTEMPTS = 3
@@ -144,9 +163,50 @@ def check_eligibility(student, verdict, rule_score, ml_score, last, trigger, now
     return True, None
 
 
+def new_ack_token() -> str:
+    """A 256-bit URL-safe token. The link IS the credential."""
+    return secrets.token_urlsafe(32)
+
+
+def acknowledge_url(token: str) -> str:
+    """The absolute link a student clicks, built from PUBLIC_BASE_URL."""
+    return f"{(settings.PUBLIC_BASE_URL or '').rstrip('/')}/alerts/acknowledge/{token}"
+
+
 def queue_alert(db, student, unit, lecturer, verdict, template, context, trigger, created_by=None):
-    message = EmailMessage(kind="student_alert", student_id=student.id, unit_id=unit.id, lecturer_id=unit.lecturer_id, recipient_email=(student.email or "").strip(), recipient_name=student.name, subject=render(template.subject, context), body=render(template.body, context), template_id=template.id, template_name=template.name, risk_tier=verdict.final_tier, verdict_id=verdict.id, trigger=trigger, status="queued", created_by=created_by)
+    # The token is minted BEFORE the body is rendered, because the URL is
+    # part of the text being frozen into the log. Rendering first and
+    # patching the link in afterwards would mean the stored body and the
+    # delivered body could differ - and the stored body is the only
+    # evidence of what the student was actually told.
+    token = new_ack_token()
+    context = {**context, "acknowledge_url": acknowledge_url(token)}
+    body = ensure_acknowledgement(render(template.body, context), context["acknowledge_url"])
+    message = EmailMessage(kind="student_alert", student_id=student.id, unit_id=unit.id, lecturer_id=unit.lecturer_id, recipient_email=(student.email or "").strip(), recipient_name=student.name, subject=render(template.subject, context), body=body, template_id=template.id, template_name=template.name, risk_tier=verdict.final_tier, verdict_id=verdict.id, trigger=trigger, status="queued", created_by=created_by, ack_token=token)
     db.add(message)
+    return message
+
+
+def acknowledge(db: Session, token: str) -> Optional[EmailMessage]:
+    """
+    Records a student's receipt against one token. Idempotent.
+
+    Returns the message for any VALID token, whether or not this call is
+    the one that set the timestamp, so the caller can render a receipt
+    either way. Returns None only when the token matches nothing.
+
+    THE TIMESTAMP IS WRITTEN ONCE. A second click is the same student
+    re-reading the same email; overwriting acknowledged_at would move the
+    record of when they were told to whenever they last happened to look.
+    """
+    if not (token or "").strip():
+        return None
+    message = db.execute(select(EmailMessage).where(EmailMessage.ack_token == token.strip())).scalars().first()
+    if message is None:
+        return None
+    if message.acknowledged_at is None:
+        message.acknowledged_at = _now()
+        db.commit()
     return message
 
 

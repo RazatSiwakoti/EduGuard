@@ -101,6 +101,35 @@ class EmailMessage(Base):
     # NULL for an automatic send - nobody pressed anything.
     created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
 
+    # ---------------------------------------------------------------
+    # ACKNOWLEDGMENT
+    #
+    # Design contributed by Aash (branch backend-aash-test,
+    # backend_aash_test/alerts_routes.py), adapted onto this table.
+    #
+    # WHY THIS EXISTS. Every count this system reports is a count of
+    # what the MAIL SERVER accepted. The report PDF says so in as many
+    # words. That is an honest number and a useless one for the
+    # question anybody actually asks about an at-risk student, which is
+    # whether the notice reached a human. Acknowledgment is the only
+    # signal in this design that comes from the student's own hand.
+    #
+    # WHY A TOKEN AND NOT THE ROW ID. The original used the primary key
+    # in the URL, which makes every other student's notice reachable by
+    # typing a different number - and the receipt page prints a name and
+    # a unit. A 256-bit token is a capability: holding it is the proof,
+    # and it exists in exactly one mailbox.
+    #
+    # NULL on a lecturer summary. A lecturer does not acknowledge their
+    # own weekly digest, and a nullable unique column lets every one of
+    # those rows stay NULL without colliding.
+    ack_token = Column(String(64), nullable=True, unique=True, index=True)
+
+    # First acknowledgment only. A student who opens the link again is
+    # not re-acknowledging; moving the timestamp would quietly rewrite
+    # when they were actually told.
+    acknowledged_at = Column(DateTime, nullable=True)
+
     student = relationship("Student")
     unit = relationship("Unit")
     lecturer = relationship("User", foreign_keys=[lecturer_id])

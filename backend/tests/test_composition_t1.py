@@ -453,12 +453,18 @@ heading("The routes are actually wired")
 route_source = Path("app/api/routes/criteria.py").read_text()
 check("create calls the lock guard",
       "assert_may_create_criteria" in route_source)
-check("update calls the lock guard",
-      "assert_may_update_criteria" in route_source)
+# T4 narrowed this route to `threshold` only, so the lock guard was
+# removed from it rather than left in place unable to fire - the pass
+# bar is not governed by the shape lock. Create and delete still hold it.
+check("update accepts threshold only (T4)",
+      "assert_lecturer_edits_only_threshold" in route_source)
+check("...so a bar change still marks results stale",
+      "record_threshold_write" in route_source)
 check("delete calls the lock guard",
       "assert_may_delete_criteria" in route_source)
-check("every write path records the write",
-      route_source.count("record_criteria_write") == 3)
+check("create and delete still record the write",
+      route_source.count("unit_composition.record_criteria_write(") == 2,
+      "T4 removed update's call - threshold is not a shape change")
 check("the unlock endpoint exists", '"/unlock"' in route_source)
 check("the preview endpoint exists", '"/unlock-preview"' in route_source)
 check("the lock-state endpoint exists", '"/lock-state"' in route_source)
@@ -566,13 +572,17 @@ check("the 409 detail explains why",
       "locked" in blocked.json()["detail"].lower())
 
 target = criterion(http_unit, Cat.ASSESSMENT)
+# T4: the per-item PATCH now accepts `threshold` only, so a weight or a
+# rename is 400 (field ownership) rather than 409 (timing) - and it is
+# 400 whether the unit is locked or not, because an unlock would never
+# make either legal.
 weight_patch = client.patch(f"{base}/{target.id}", json={"weight": 0.35})
-check("changing a weight on a locked unit returns 409",
-      weight_patch.status_code == 409, weight_patch.text)
+check("changing a weight is 400 - weights belong to the coordinator",
+      weight_patch.status_code == 400, weight_patch.text)
 
 rename = client.patch(f"{base}/{target.id}", json={"name": "Renamed Quiz"})
-check("renaming on a locked unit still returns 200",
-      rename.status_code == 200, rename.text)
+check("renaming through the lecturer route is 400 too (T4)",
+      rename.status_code == 400, rename.text)
 
 # D1's rules must still produce 400, not 409 - the frontend distinguishes
 # "fix this number" from "this unit is locked" by the status code alone.
@@ -602,10 +612,19 @@ check("the correct code unlocks (200)", good.status_code == 200, good.text)
 check("the response says it is unlocked", good.json()["unlocked"] is True)
 
 acting_as["user"] = lecturer
-allowed = client.patch(f"{base}/{target.id}", json={"weight": 0.35})
+# Exercised through create rather than a weight PATCH: after T4 the
+# per-item PATCH cannot make a shape change at all, so create is now the
+# lecturer-facing write that meets the lock.
+allowed = client.post(base, json={
+    "name": "Quiz 4", "weight": 0.1, "threshold": 50.0,
+    "max_score": 10.0, "category": "assessment", "sequence_number": 3,
+})
 check("the unlocked window permits ONE shape change",
-      allowed.status_code == 200, allowed.text)
-after = client.patch(f"{base}/{target.id}", json={"weight": 0.4})
+      allowed.status_code == 201, allowed.text)
+after = client.post(base, json={
+    "name": "Quiz 5", "weight": 0.1, "threshold": 50.0,
+    "max_score": 10.0, "category": "assessment", "sequence_number": 4,
+})
 check("the second change is refused - the window closed",
       after.status_code == 409, f"{after.status_code} {after.text}")
 

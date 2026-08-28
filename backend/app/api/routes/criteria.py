@@ -22,14 +22,8 @@ Every write here also passes `unit_composition`, which refuses a SHAPE
 change once real assessment or tutorial results exist, or once an
 analysis has produced verdicts. Renames stay allowed in both lives.
 
-Two status codes, deliberately different:
-
   400  the value is not permitted        (D1 - fix the number)
   409  the unit's shape is locked        (T1 - unlock, or leave it)
-
-They are separate because the UI's response is separate: one is a field
-error under an input, the other is an admin unlock flow. Collapsing both
-into 400 forces the frontend to pattern-match on English error text.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -50,18 +44,13 @@ from app.schemas.criteria import (
     UnlockRequest,
     UnlockResultOut,
 )
+from app.schemas.unit_shape import LecturerUnitShapeOut, ThresholdUpdateIn
 from app.services import criteria_service, unit_composition
 
 router = APIRouter(prefix="/units/{unit_id}/criteria", tags=["Criteria"])
 
 
 def _locked(exc: unit_composition.ShapeLockedError) -> HTTPException:
-    """
-    409, not 400. The payload is well-formed AND permitted - it is the
-    unit's state that refuses it, and it would have been accepted
-    yesterday. 409 Conflict is what tells the client to offer an unlock
-    rather than to correct a field.
-    """
     return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
 
 
@@ -97,10 +86,7 @@ def _get_criteria_or_404(db: Session, unit_id: int, criteria_id: int) -> Criteri
 # DECLARED BEFORE `/{criteria_id}`, AND THAT IS NOT A STYLE CHOICE.
 # FastAPI matches routes in declaration order. `/{criteria_id}` is typed
 # `int`, so a request to GET /units/1/criteria/lock-state that reaches it
-# first does NOT fall through to the next route - it fails validation and
-# returns 422 with a message about an invalid integer. Moving these
-# declarations below would break both endpoints in a way that looks like
-# a client bug.
+# first does NOT fall through - it fails validation and returns 422.
 # ---------------------------------------------------------------------
 
 @router.get("/lock-state", response_model=LockStateOut)
@@ -109,13 +95,6 @@ def get_lock_state(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role(UserRole.LECTURER, UserRole.ADMIN)),
 ):
-    """
-    Read-only: may this unit's criteria be edited, and why not.
-
-    Open to the assigned lecturer as well as an admin. A lecturer whose
-    form is about to refuse every save needs to be told why before they
-    fill it in, not after.
-    """
     unit = _get_unit_or_404(db, unit_id)
     if current_user.role == UserRole.LECTURER:
         _require_assigned_lecturer(unit, current_user)
@@ -128,13 +107,6 @@ def get_unlock_preview(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role(UserRole.ADMIN)),
 ):
-    """
-    What unlocking will cost, so the UI can state it BEFORE asking for
-    the confirmation rather than after.
-
-    Admin-only, matching the unlock itself: there is no reason to show a
-    lecturer the price of a door they cannot open.
-    """
     unit = _get_unit_or_404(db, unit_id)
     return unit_composition.unlock_preview(db, unit)
 
@@ -146,16 +118,6 @@ def unlock_criteria(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role(UserRole.ADMIN)),
 ):
-    """
-    Opens a one-shot edit window on a locked unit. Admin only.
-
-    The typed unit code is the confirmation. It is checked server-side
-    and not merely in the dialog, because a client-side-only confirmation
-    protects against a mis-click and nothing else.
-
-    NOTE: this marks NOTHING stale. Staleness lands on the save that
-    follows - see `unit_composition.unlock_shape`.
-    """
     unit = _get_unit_or_404(db, unit_id)
 
     try:
@@ -163,12 +125,89 @@ def unlock_criteria(
             db, unit, payload.unit_code, actor_id=current_user.id
         )
     except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
     db.commit()
     return result
+
+
+# ---------------------------------------------------------------------
+# The lecturer's threshold bar (section T4)
+#
+# Both literals, so both belong ABOVE `/{criteria_id}` for the same
+# reason T1's do - see the note there.
+# ---------------------------------------------------------------------
+
+@router.get("/shape", response_model=LecturerUnitShapeOut)
+def get_unit_shape_for_lecturer(
+    unit_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.LECTURER, UserRole.ADMIN)),
+):
+    """
+    What the coordinator set, plus where the lecturer's bars currently
+    sit - in ONE request.
+
+    Read-only, and it returns the SAME payload the admin setup endpoint
+    does (plus `thresholds`). Building a second, differently-shaped read
+    of the same rows is how two screens end up disagreeing about what a
+    unit is worth.
+
+    An admin may read it too: they own the shape, and being unable to
+    see the bars a lecturer set on a unit they configured would make the
+    100% budget half-visible to the person responsible for it.
+    """
+    unit = _get_unit_or_404(db, unit_id)
+    if current_user.role == UserRole.LECTURER:
+        _require_assigned_lecturer(unit, current_user)
+    return unit_composition.lecturer_threshold_view(db, unit)
+
+
+@router.patch("/thresholds", response_model=LecturerUnitShapeOut)
+def update_unit_thresholds(
+    unit_id: int,
+    payload: ThresholdUpdateIn,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.LECTURER)),
+):
+    """
+    Move the pass bar for one or both adjustable categories.
+
+    THE SHAPE LOCK IS DELIBERATELY NOT CONSULTED HERE. A unit is locked
+    exactly when marks have been imported or an analysis has run - which
+    is exactly when a lecturer looks at their at-risk list and decides
+    the bar is wrong. Gating the slider on the lock would make it
+    editable only on units where it changes nothing anyone can see. The
+    long note in `unit_composition` sets out why that is safe: a shape
+    change makes a stored score MEAN something else, a bar change only
+    moves the line drawn through scores that stay exactly where they
+    are.
+
+    It does mark analyses stale, through T1's existing timestamp, so the
+    report and the PDF both say "re-run the analysis" without a second
+    mechanism being invented for it.
+
+    Admin-excluded on purpose: an admin's own path to these numbers is
+    the setup screen, and widening this role check is section T5's
+    problem, with its tenant-isolation retest attached.
+    """
+    unit = _get_unit_or_404(db, unit_id)
+    _require_assigned_lecturer(unit, current_user)
+
+    try:
+        view = unit_composition.apply_threshold_changes(
+            db, unit, payload.model_dump(exclude_unset=True)
+        )
+    except ValueError as exc:
+        # Covers ThresholdError AND the ValueError D1's
+        # `validate_lecturer_threshold` raises. Both are "that number is
+        # not allowed", both render 400, and the form prints either one
+        # under the slider that caused it.
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+    db.commit()
+    return unit_composition.lecturer_threshold_view(db, unit)
 
 
 @router.post("", response_model=CriteriaOut, status_code=status.HTTP_201_CREATED)
@@ -183,9 +222,6 @@ def create_criteria(
 
     data = payload.model_dump()
 
-    # T1 first: "this unit is locked" is a truer explanation than "that
-    # threshold is too low" when both are true, and it is the one the
-    # coordinator can act on.
     try:
         unit_composition.assert_may_create_criteria(db, unit)
     except unit_composition.ShapeLockedError as exc:
@@ -194,8 +230,6 @@ def create_criteria(
     try:
         criteria_service.assert_lecturer_may_create(data)
     except ValueError as exc:
-        # 400, not 422: the payload is well-FORMED, it is just not
-        # permitted. A 422 would tell the client to fix its shape.
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
     criteria = Criteria(unit_id=unit_id, **data)
@@ -244,16 +278,21 @@ def update_criteria(
 
     update_data = payload.model_dump(exclude_unset=True)
 
-    # Decided BEFORE the fields are written, while `criteria` still holds
-    # its stored values - `effective_changes` compares against them, and
-    # after the setattr loop every change would look like a no-op.
-    effective = unit_composition.effective_changes(criteria, update_data)
-    shape_changed = unit_composition.is_shape_change(effective)
-
+    # SECTION T4: threshold, and nothing else.
+    #
+    # Checked FIRST, ahead of the shape lock, and the order is the
+    # honest one. "You may never set this field" is permanent; "the unit
+    # is locked" is timing. Reporting the lock first would tell a
+    # lecturer an administrator could unlock the unit and let them
+    # change a weight, which is not true and never will be.
     try:
-        unit_composition.assert_may_update_criteria(db, unit, criteria, update_data)
-    except unit_composition.ShapeLockedError as exc:
-        raise _locked(exc)
+        criteria_service.assert_lecturer_edits_only_threshold(update_data)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+    # Compared BEFORE the setattr loop, while `criteria` still holds its
+    # stored value - afterwards every change looks like a no-op.
+    effective = unit_composition.effective_changes(criteria, update_data)
 
     try:
         criteria_service.assert_lecturer_may_update(criteria, update_data)
@@ -263,9 +302,17 @@ def update_criteria(
     for field, value in update_data.items():
         setattr(criteria, field, value)
 
-    # A rename bumps nothing: it must not mark a single analysis stale,
-    # and it must not consume an admin's one-shot unlock window.
-    unit_composition.record_criteria_write(unit, shape_changed=shape_changed)
+    # NO LOCK GUARD AND NO `record_criteria_write` HERE, deliberately.
+    # The only field this route now accepts is the pass bar, which the
+    # shape lock does not govern (see `unit_composition`'s T4 note), so
+    # `assert_may_update_criteria` could never refuse anything and
+    # `record_criteria_write` could never fire - a guard that cannot
+    # trigger is the exact pattern this project has produced nine cases
+    # of. A bar change DOES invalidate results, so it marks them stale
+    # through the one call that can still do something:
+    if "threshold" in effective:
+        unit_composition.record_threshold_write(unit)
+
     db.commit()
     db.refresh(criteria)
     return criteria
@@ -282,11 +329,6 @@ def delete_criteria(
     _require_assigned_lecturer(unit, current_user)
     criteria = _get_criteria_or_404(db, unit_id, criteria_id)
 
-    # Covers the soft-delete path too: `delete_or_disable_criteria`
-    # DISABLES a criterion that has events attached, and a disabled
-    # criterion is dropped from the rule engine's blend and from the
-    # report. As far as every score already computed is concerned, that
-    # is a deletion.
     try:
         unit_composition.assert_may_delete_criteria(db, unit)
     except unit_composition.ShapeLockedError as exc:

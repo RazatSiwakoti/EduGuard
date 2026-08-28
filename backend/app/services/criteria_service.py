@@ -99,3 +99,55 @@ def assert_lecturer_may_update(criteria: Criteria, changes: dict) -> None:
         validate_lecturer_threshold(target_category, changes["threshold"])
     elif "category" in changes:
         validate_lecturer_threshold(target_category, criteria.threshold)
+
+
+# ---------------------------------------------------------------------
+# What a lecturer may write through the PER-ITEM endpoint (section T4)
+# ---------------------------------------------------------------------
+
+#: The only field a lecturer may PATCH on a criterion.
+#:
+#: Before T2 this endpoint was the only way a unit got configured, so it
+#: accepted everything. T2 moved the SHAPE - name, kind, percentage, and
+#: the weight and max_score derived from it - to the coordinator's
+#: admin PUT, which is the only place the composition rules (max 3
+#: items, 20% quiz cap, 100% budget) are checked. Leaving the per-item
+#: PATCH wide open left a back door straight past all of them: a
+#: lecturer could re-weight an assessment to 90%, or flip its category,
+#: and no composition rule would ever see it.
+#:
+#: `threshold` stays because it is the lecturer's own decision - where
+#: the pass bar sits (section T4's slider). Everything else is the
+#: coordinator's.
+LECTURER_EDITABLE_FIELDS = frozenset({"threshold"})
+
+
+def assert_lecturer_edits_only_threshold(changes: dict) -> None:
+    """
+    Raises ValueError naming every field a lecturer may not set.
+
+    REFUSED, NOT FILTERED. Quietly dropping the fields and applying the
+    rest is worse: the client gets a 200 and a response body that
+    disagrees with what it sent, and a lecturer walks away believing
+    they changed a weight that never moved. Same reasoning as D1's
+    fixed-category guard, one field-set out.
+
+    Checked BEFORE the shape lock, and the order is the honest one. "You
+    may never set this field" is permanent; "not right now" is timing.
+    Reporting a locked unit first would tell a lecturer that an
+    administrator could unlock the unit and let them change a weight -
+    which is not true, and never will be.
+    """
+    forbidden = sorted(set(changes) - LECTURER_EDITABLE_FIELDS)
+    if not forbidden:
+        return
+
+    names = [field.replace("_", " ") for field in forbidden]
+    listed = names[0] if len(names) == 1 else (
+        ", ".join(names[:-1]) + " and " + names[-1]
+    )
+    raise ValueError(
+        "A lecturer can only change a criterion's pass threshold - "
+        f"{listed} {'are' if len(names) > 1 else 'is'} set by the unit "
+        "coordinator on the unit's criteria setup screen."
+    )

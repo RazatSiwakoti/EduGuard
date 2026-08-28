@@ -19,6 +19,17 @@
  */
 export type CriteriaCategory = "attendance" | "weekly_tut" | "assessment" | "moodle";
 
+/**
+ * What KIND of assessment a criterion is (section T2/T4).
+ *
+ * Deliberately separate from `category`, which stays at four values
+ * because it is the ML contract — splitting ASSESSMENT into QUIZ and
+ * ASSIGNMENT would have dropped every assessment out of every scoring
+ * branch that matches on it. Re-exported from `unitShape` so the two
+ * files cannot drift apart.
+ */
+export type { AssessmentKind } from "./unitShape";
+
 /** Response shape from GET /units/{unit_id}/criteria. */
 export interface Criterion {
   id: number;
@@ -29,6 +40,16 @@ export interface Criterion {
   max_score: number;
   /** Nullable on legacy rows created before categories existed. */
   category: CriteriaCategory | null;
+  /**
+   * Quiz or assignment. Null for the other three categories, and null
+   * on every row written before the coordinator's setup form existed.
+   *
+   * Added to the backend's CriteriaOut in section T4: T2 created the
+   * column and the admin endpoint but not this schema, so until now the
+   * overview tab, the import wizard and the manual-entry form could not
+   * tell a quiz from an assignment.
+   */
+  kind: import("./unitShape").AssessmentKind | null;
   /** Only meaningful for assessments — which slot (1-4) this is. */
   sequence_number: number | null;
   enabled: boolean;

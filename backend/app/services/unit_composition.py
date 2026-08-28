@@ -1048,3 +1048,227 @@ def _apply_tutorial(db: Session, unit: Unit, enabled: bool) -> None:
 
     for row in active:
         criteria_service.delete_or_disable_criteria(db, row)
+
+
+# =====================================================================
+# SECTION T4 - THE LECTURER'S THRESHOLD BAR
+# =====================================================================
+#
+# T2 above gives the coordinator the unit's SHAPE - which assessments
+# exist and what each is worth. This section gives the lecturer the one
+# number the coordinator does not own: the PASS BAR each category is
+# judged against.
+#
+# THE DIVISION OF LABOUR, STATED ONCE
+# -----------------------------------
+#   coordinator  what the unit is made of   name, kind, percentage
+#                                           -> weight, max_score
+#   lecturer     where the bar sits         threshold
+#
+# `pass_mark = max_score * threshold / 100` is the only place the two
+# meet, and it is derived at read time (T2) precisely so neither side
+# can overwrite the other's half of it.
+#
+# ---------------------------------------------------------------------
+# WHY THE SHAPE LOCK DOES NOT COVER THE BAR
+# ---------------------------------------------------------------------
+# T1 refuses a shape change once real marks or verdicts exist. Applying
+# that same lock to the threshold - the obvious reading, since a
+# threshold change genuinely does move every rule-based score - makes
+# this entire feature unreachable.
+#
+# A unit is locked exactly when assessment marks have been imported or
+# an analysis has run. That is ALSO exactly when a lecturer looks at
+# their at-risk list and decides the bar is in the wrong place. Under a
+# shared lock the slider would be editable only on units with no data
+# and no analysis, i.e. only where it changes nothing anyone can see,
+# and every real use would route through an admin unlock. That is the
+# permanently jammed door T1's module docstring warns about, one level
+# up.
+#
+# The distinction that makes this safe: a shape change re-weights the
+# blend, so a stored score no longer MEANS what it meant. A threshold
+# change leaves every stored score exactly where it was and moves only
+# the line drawn through them. The marks are still true; the verdicts
+# computed from them are not.
+#
+# ---------------------------------------------------------------------
+# ...BUT IT DOES MARK ANALYSES STALE
+# ---------------------------------------------------------------------
+# `rule_engine.calculate_badness(actual, threshold)` reads the bar
+# directly, so moving it changes every rule-based risk score in the
+# unit, which changes the blend, which changes the final tier. Verdicts
+# produced before the move were computed against a bar that no longer
+# exists.
+#
+# That is precisely T1's definition of stale, so this reuses T1's
+# machinery rather than inventing a second one: `record_threshold_write`
+# bumps `criteria_updated_at`, `stale_verdict_summary` picks it up, and
+# the caveat reaches the on-screen report and the PDF for free.
+#
+# It does NOT, however, consume an admin's one-shot unlock window. The
+# window was opened for a SHAPE change; spending it on a lecturer
+# lowering a bar would close the door on the coordinator who asked for
+# it - the same argument T1 makes for a rename.
+
+#: The two categories whose bar a lecturer may move. Derived from D1's
+#: floors dict rather than restated, so a third adjustable category can
+#: never exist in one file and not the other.
+ADJUSTABLE_CATEGORIES = (CriteriaCategory.ASSESSMENT, CriteriaCategory.WEEKLY_TUT)
+
+
+class ThresholdError(ValueError):
+    """
+    A pass-bar change that cannot be applied.
+
+    A ValueError subclass so the route renders it 400, exactly like D1's
+    floor refusals and T2's composition refusals - all three are "that
+    number is not allowed", and the form does the same thing with each.
+    Distinct from ShapeLockedError (409) because the bar is never
+    refused for TIMING; see the long note above.
+    """
+
+
+def _adjustable_criteria(db: Session, unit_id: int, category) -> list[Criteria]:
+    """Enabled rows in one adjustable category, in the form's own order."""
+    return _shape_criteria(db, unit_id, (category,))
+
+
+def threshold_group(db: Session, unit: Unit, category) -> dict:
+    """
+    One slider's worth of state.
+
+    THE MIXED CASE IS THE REASON THIS RETURNS A GROUP RATHER THAN A
+    NUMBER. There is one slider per category (runbook decision) but
+    `threshold` is stored per ROW, and D1's per-item endpoint has always
+    been able to leave two assessments on different bars. A slider that
+    silently rendered the first row's value would show 50 for a unit
+    whose second assessment sits at 46, and the lecturer's first drag
+    would flatten the 46 without ever having displayed it.
+
+    So a group whose rows disagree reports `value = None` and
+    `mixed = True`, and the form says so instead of picking a winner.
+    Saving still flattens - that is what one slider MEANS - but the
+    lecturer is told what they are flattening first.
+    """
+    from app.services.rule_engine import (  # local: avoids an import cycle
+        DEFAULT_THRESHOLD, THRESHOLD_FLOORS,
+    )
+
+    key = _kind_value(category)
+    rows = _adjustable_criteria(db, unit.id, category)
+    values = [row.threshold for row in rows if row.threshold is not None]
+    distinct = sorted(set(values))
+
+    return {
+        "category": key,
+        # Read from D1's own dict, never copied. A floor stated twice is
+        # a floor that eventually disagrees with itself.
+        "floor": THRESHOLD_FLOORS.get(key),
+        "default": DEFAULT_THRESHOLD,
+        "applies_to": len(rows),
+        "value": distinct[0] if len(distinct) == 1 else None,
+        "mixed": len(distinct) > 1,
+        "values": distinct,
+        # A category with no rows gets no slider. A control that writes
+        # nothing is worse than an absent one: it reports success and
+        # changes nothing.
+        "adjustable": bool(rows),
+        "item_names": [row.name for row in rows],
+    }
+
+
+def lecturer_threshold_view(db: Session, unit: Unit) -> dict:
+    """
+    Everything the lecturer's unit page needs, in ONE request.
+
+    Deliberately the same payload T2's admin GET returns, plus the
+    `thresholds` block - the lecturer is reading the coordinator's shape,
+    and building a second, differently-shaped read of the same rows is
+    how the two screens end up disagreeing about what a unit is worth.
+
+    `automatic` (attendance and Moodle) is carried but gets no slider:
+    their thresholds are system constants and `validate_lecturer_threshold`
+    refuses every attempt to move them, so offering a control would be
+    offering a button that is guaranteed to fail.
+    """
+    shape = get_unit_shape(db, unit)
+    shape["thresholds"] = {
+        _kind_value(category): threshold_group(db, unit, category)
+        for category in ADJUSTABLE_CATEGORIES
+    }
+    return shape
+
+
+def record_threshold_write(unit: Unit, now: Optional[datetime] = None) -> None:
+    """
+    Marks the unit's analyses stale WITHOUT touching the unlock window.
+
+    The difference from `record_criteria_write` is the whole point:
+    moving the bar invalidates results (so the timestamp moves) but is
+    not the shape change an admin opened a one-shot window for (so the
+    window stays open). Spending an admin's unlock on a lecturer's
+    slider would close the door on the coordinator who asked for it.
+    """
+    unit.criteria_updated_at = (now or _now()).replace(tzinfo=None)
+
+
+def apply_threshold_changes(db: Session, unit: Unit, changes: dict) -> dict:
+    """
+    Sets the pass bar for one or both adjustable categories.
+
+    `changes` maps a category value to a threshold; a None or absent
+    entry means "leave this one alone", so the form can save one slider
+    without echoing the other.
+
+    IDEMPOTENT ON PURPOSE. The page GETs the view and PATCHes it back,
+    so a lecturer who opens the unit and presses Save has sent the
+    stored values. If no row actually moves, nothing is written and
+    `criteria_updated_at` is NOT bumped - otherwise pressing Save
+    without editing would mark a whole cohort's results stale.
+
+    Raises ThresholdError or the ValueError that D1's
+    `validate_lecturer_threshold` raises; both render 400. Stages only -
+    the route owns the commit.
+    """
+    from app.services.rule_engine import validate_lecturer_threshold
+
+    by_value = {_kind_value(category): category for category in ADJUSTABLE_CATEGORIES}
+    moved = 0
+
+    for key, proposed in changes.items():
+        if proposed is None:
+            continue
+
+        category = by_value.get(key)
+        if category is None:
+            # Attendance and Moodle land here. Refused rather than
+            # ignored: silently dropping a write the caller believes
+            # succeeded is how a lecturer ends up certain they lowered a
+            # bar that never moved. Same reasoning as D1's guard.
+            raise ThresholdError(
+                f"{str(key).replace('_', ' ').title()} has a fixed threshold "
+                "and cannot be adjusted."
+            )
+
+        # D1's rule, called rather than restated: floor, and never above
+        # the 50% default.
+        validate_lecturer_threshold(category, proposed)
+
+        rows = _adjustable_criteria(db, unit.id, category)
+        if not rows:
+            raise ThresholdError(
+                f"This unit has no {str(key).replace('_', ' ')} criteria to set "
+                "a pass mark on. Ask the unit coordinator to add one first."
+            )
+
+        for row in rows:
+            if row.threshold != proposed:
+                row.threshold = proposed
+                moved += 1
+
+    if moved:
+        db.flush()
+        record_threshold_write(unit)
+
+    return lecturer_threshold_view(db, unit)

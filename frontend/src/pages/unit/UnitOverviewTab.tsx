@@ -5,17 +5,31 @@ import { useUnitCriteria } from "../../hooks/useLecturerUnits";
 import { CATEGORY_COLUMN_COUNT, FIXED_CATEGORIES } from "../../types/criteria";
 import type { CriteriaCategory } from "../../types/criteria";
 import { CATEGORY_LABELS } from "../../utils/dashboardAggregations";
-import RunAnalysisButton from "../../components/analysis/RunAnalysisButton";
+import UnitCompositionPanel from "../../components/criteria/UnitCompositionPanel";
 
 /**
  * What this unit is marked on, and what to do next.
  *
- * The criteria list is the important half. Criteria are what CSV
- * columns get mapped TO during import, so a unit with only its two
- * seeded criteria literally cannot accept assignment or tutorial data
- * yet — there is nothing for those columns to map onto. Surfacing that
- * here means a lecturer finds out before they open the wizard, not
- * halfway through it.
+ * TWO SECTIONS THAT LOOK SIMILAR AND ARE NOT
+ * ------------------------------------------
+ * `UnitCompositionPanel` (section T4) answers "what is this unit worth
+ * and where is the pass mark" — the coordinator's shape, the derived
+ * pass marks, and the two sliders the lecturer owns.
+ *
+ * The list below answers a different question: "what must my
+ * spreadsheet contain". It covers all four categories including
+ * attendance and Moodle, which are outside the 100% and therefore
+ * absent from the panel above, and it carries the column counts —
+ * exactly 7 attendance values, exactly 6 tutorial values — that
+ * `calculate_attendance_trend` and
+ * `calculate_tutorial_completion_trend` return None without. Getting
+ * that wrong still produces a percentage and silently loses the trend
+ * the momentum chart depends on.
+ *
+ * The weight and threshold numbers that used to sit on the right of
+ * every row here have moved into the panel, where they appear beside
+ * the pass mark they produce. Two places showing the same threshold was
+ * one place too many the moment a slider could change it.
  */
 export default function UnitOverviewTab() {
   const { unit } = useOutletContext<UnitTabContext>();
@@ -33,24 +47,19 @@ export default function UnitOverviewTab() {
 
   return (
     <div className="space-y-6">
+      <UnitCompositionPanel unitId={unit.id} />
+
       <section className="rounded-lg border border-stone-200 bg-white p-5">
         <header className="mb-4 flex items-start justify-between gap-4">
           <div>
             <h2 className="text-sm font-semibold text-stone-900">
-              Assessment criteria
+              Data this unit accepts
             </h2>
             <p className="mt-0.5 text-xs leading-relaxed text-stone-500">
-              What this unit is scored on. Attendance and Moodle are fixed for every
-              unit; anything else is yours to define.
+              What an import can map onto, and how many spreadsheet columns each
+              one needs.
             </p>
           </div>
-
-          {/* Scoped to this unit so lecturers can re-score only this cohort. */}
-          <RunAnalysisButton
-            unitId={unit.id}
-            label="Run analysis"
-            variant="secondary"
-          />
         </header>
 
         {isLoading && (
@@ -74,6 +83,9 @@ export default function UnitOverviewTab() {
                 const category = criterion.category as CriteriaCategory | null;
                 const columns = category ? CATEGORY_COLUMN_COUNT[category] : null;
                 const isFixed = category ? FIXED_CATEGORIES.includes(category) : false;
+                const label = category
+                  ? CATEGORY_LABELS[category] ?? category
+                  : "Uncategorised";
 
                 return (
                   <li
@@ -99,21 +111,21 @@ export default function UnitOverviewTab() {
                         )}
                       </p>
                       <p className="mt-0.5 text-xs text-stone-500">
-                        {category ? CATEGORY_LABELS[category] ?? category : "Uncategorised"}
+                        {/* The category label is dropped when it just
+                            repeats the name — "Attendance · Attendance
+                            · needs exactly 7 columns" was the row this
+                            section rendered before. */}
+                        {label !== criterion.name && `${label} · `}
                         {/* Column count is the single most useful fact
                             here — it is what the lecturer must satisfy
                             in their spreadsheet, and getting it wrong
                             silently drops the trend value. */}
                         {columns
-                          ? ` · needs exactly ${columns} columns`
-                          : " · single column"}
+                          ? `needs exactly ${columns} columns`
+                          : "single column"}
                       </p>
                     </div>
 
-                    <div className="flex shrink-0 gap-4 text-xs tabular-nums text-stone-500">
-                      <span>Weight {criterion.weight}</span>
-                      <span>Threshold {criterion.threshold}</span>
-                    </div>
                   </li>
                 );
               })}

@@ -5,7 +5,7 @@ Pydantic schemas for Criteria management: create, update, and the response shape
 from datetime import datetime
 from typing import Optional
 from pydantic import BaseModel, Field
-from app.models.enums import CriteriaCategory
+from app.models.enums import AssessmentKind, CriteriaCategory
 
 
 class CriteriaCreate(BaseModel):
@@ -37,6 +37,13 @@ class CriteriaOut(BaseModel):
     threshold: float
     max_score: float
     category: Optional[CriteriaCategory] = None
+    # Section T4. T2 added `kind` to the model and to the admin shape
+    # endpoint but not here, so nothing outside the coordinator's setup
+    # form could tell a quiz from an assignment - the overview tab, the
+    # import wizard and the manual-entry form all read THIS schema.
+    # Nullable: every row written before T2 has no kind, and the
+    # non-assessment categories never have one.
+    kind: Optional[AssessmentKind] = None
     sequence_number: Optional[int] = None
     enabled: bool
 
@@ -46,15 +53,6 @@ class CriteriaOut(BaseModel):
 # ---------------------------------------------------------------------
 
 class LockStateOut(BaseModel):
-    """
-    Whether this unit's criteria may be edited, and why not.
-
-    `reasons` is a list of finished sentences rather than machine codes:
-    the UI shows them verbatim, and a client that has to turn an enum
-    into a sentence is a second place where the rules get described -
-    which is a second place for them to be described wrongly.
-    """
-
     state: str                          # "draft" | "locked"
     locked: bool
     lockable: bool                      # would be locked but for an unlock
@@ -77,12 +75,6 @@ class UnlockPreviewOut(LockStateOut):
 
 
 class UnlockRequest(BaseModel):
-    """
-    The typed confirmation. Named `unit_code` rather than `confirm`
-    because the field IS the unit code - a client sending a literal
-    "CONFIRM" proves nothing about which unit is open on screen.
-    """
-
     unit_code: str = Field(..., min_length=1, max_length=64)
 
 

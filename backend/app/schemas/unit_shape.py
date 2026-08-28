@@ -112,3 +112,72 @@ class UnitShapeOut(BaseModel):
     automatic: list[CriterionShapeOut] = []
     limits: ShapeLimitsOut
     lock: dict
+
+
+# ---------------------------------------------------------------------
+# The lecturer's threshold bar (section T4)
+# ---------------------------------------------------------------------
+
+class ThresholdGroupOut(BaseModel):
+    """
+    One slider. There is one per adjustable CATEGORY, not one per item -
+    a lecturer decides what "passing an assessment" means for the unit,
+    not for Quiz 1 specifically.
+
+    `value` is None when the category's rows disagree (`mixed`). The
+    form must say so rather than render the first row's number: D1's
+    per-item endpoint can leave two assessments on different bars, and a
+    slider that showed 50 for a unit whose second assessment sits at 46
+    would flatten the 46 on its first drag without ever displaying it.
+    """
+
+    category: str
+    #: The lowest a lecturer may go, read from D1's own floors dict.
+    floor: Optional[float] = None
+    #: The ceiling and the starting point. Never raised above.
+    default: float
+    #: How many enabled criteria this slider writes to. Zero means the
+    #: category is absent from the unit and no slider is shown.
+    applies_to: int
+    value: Optional[float] = None
+    mixed: bool = False
+    values: list[float] = []
+    adjustable: bool = False
+    item_names: list[str] = []
+
+
+class LecturerUnitShapeOut(UnitShapeOut):
+    """
+    The coordinator's shape plus the lecturer's bars, in one response.
+
+    Deliberately an extension of `UnitShapeOut` rather than a parallel
+    type: the lecturer is reading the SAME rows the setup form writes,
+    and two differently-shaped reads of one table is how two screens end
+    up disagreeing about what a unit is worth.
+    """
+
+    thresholds: dict[str, ThresholdGroupOut] = {}
+
+
+class ThresholdUpdateIn(BaseModel):
+    """
+    A pass-bar change for one or both adjustable categories.
+
+    `extra="forbid"` is doing real work: it is what makes
+    `{"attendance": 10}` a 422 rather than a silently ignored field. A
+    lecturer who believes they moved the attendance bar and did not is
+    exactly the outcome D1's guards exist to prevent.
+
+    Both fields optional so one slider can save without echoing the
+    other; a payload that changes nothing is accepted and writes
+    nothing.
+
+    NOTE what is NOT here: name, weight, max_score, kind, percentage.
+    The shape belongs to the coordinator's admin PUT (section T2), and
+    this endpoint is the lecturer's entire write surface on a unit.
+    """
+
+    model_config = {"extra": "forbid"}
+
+    assessment: Optional[float] = Field(None, ge=0, le=100)
+    weekly_tut: Optional[float] = Field(None, ge=0, le=100)

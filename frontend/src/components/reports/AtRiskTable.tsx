@@ -367,6 +367,18 @@ export default function AtRiskTable({ rows, alertsAvailable }: AtRiskTableProps)
                               <Mail className="h-3 w-3" aria-hidden="true" />
                               {row.alerts_sent}
                             </span>
+                            {/* Shown only when it happened. A "0
+                                confirmed" beside every contacted
+                                student would repeat the same six
+                                characters down the column and stop
+                                being read; the caveats above already
+                                state the cohort-wide case in words. */}
+                            {row.alerts_acknowledged > 0 && (
+                              <p className="mt-0.5 inline-flex items-center gap-1 text-xs font-medium text-teal-700">
+                                <UserCheck className="h-3 w-3" aria-hidden="true" />
+                                {row.alerts_acknowledged} confirmed
+                              </p>
+                            )}
                             {row.last_alert_at && (
                               <p className="mt-0.5 text-xs text-stone-400">
                                 {formatDateTime(row.last_alert_at)}

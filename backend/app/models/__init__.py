@@ -11,3 +11,4 @@ from app.models.final_verdicts import FinalVerdict
 from app.models.email_template import EmailTemplate
 from app.models.email_message import EmailMessage
 from app.models.verdict_review import VerdictReview
+from app.models.audit_event import AuditEvent

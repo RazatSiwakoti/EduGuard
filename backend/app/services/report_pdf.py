@@ -440,6 +440,13 @@ def _flags_of(row: dict) -> str:
     if row.get("alerts_sent"):
         count = row["alerts_sent"]
         flags.append(f"{count} alert{'' if count == 1 else 's'} sent")
+        # Printed only when it happened. A "0 confirmed" on every line
+        # would put the same six characters beside every student in the
+        # document and stop meaning anything by the third row; the
+        # caveat on page 1 already covers the cohort-wide case.
+        confirmed = row.get("alerts_acknowledged") or 0
+        if confirmed:
+            flags.append(f"{confirmed} confirmed received")
     return ", ".join(flags)
 
 
@@ -562,12 +569,31 @@ def _intervention_section(report: dict, style: dict, width: float) -> list:
             ("Still awaiting a decision", data.get("reviews_pending", 0)),
         ]
     else:
-        out.append(Paragraph(
-            "What was done, as distinct from what the engines found. "
-            "&ldquo;Sent&rdquo; means the mail server accepted the message; it "
-            "is not a read receipt.",
-            style["note"],
-        ))
+        # THE NOTE CHANGES WITH WHAT THE DEPLOYMENT CAN ACTUALLY KNOW.
+        # Before acknowledgment existed, this paragraph had to apologise
+        # that "sent" is not a read receipt and leave it there. Where
+        # receipts ARE recorded, the document can now draw the line
+        # itself - and a reader forwarding this to a course coordinator
+        # needs the distinction stated, not implied by two numbers
+        # sitting next to each other.
+        if data.get("acknowledgment_available"):
+            out.append(Paragraph(
+                "What was done, as distinct from what the engines found. "
+                "&ldquo;Sent&rdquo; means the mail server accepted the message. "
+                "&ldquo;Confirmed received&rdquo; means the student opened the "
+                "link in it and said so &mdash; the only figure here that comes "
+                "from the student rather than from this system.",
+                style["note"],
+            ))
+        else:
+            out.append(Paragraph(
+                "What was done, as distinct from what the engines found. "
+                "&ldquo;Sent&rdquo; means the mail server accepted the message; it "
+                "is not a read receipt. Receipt confirmation is not recorded on "
+                "this deployment.",
+                style["note"],
+            ))
+
         pairs = [
             ("Alerts sent", data.get("alerts_sent", 0)),
             ("Failed to send", data.get("alerts_failed", 0)),
@@ -575,6 +601,18 @@ def _intervention_section(report: dict, style: dict, width: float) -> list:
             # Distinct students, not messages: one student can be emailed
             # more than once, and counting messages as people overstates reach.
             ("Distinct students contacted", data.get("students_contacted", 0)),
+        ]
+
+        if data.get("acknowledgment_available"):
+            # Placed directly after the contact figures, because the
+            # question the reader is holding at that point is "and did
+            # any of that reach anyone".
+            pairs += [
+                ("Confirmed received", data.get("alerts_acknowledged", 0)),
+                ("Students who confirmed", data.get("students_acknowledged", 0)),
+            ]
+
+        pairs += [
             ("Sent automatically", data.get("alerts_automatic", 0)),
             ("Sent manually", data.get("alerts_manual", 0)),
             ("Engine disagreements resolved", data.get("reviews_resolved", 0)),

@@ -51,11 +51,30 @@ export default function InterventionRecord({
         <h2 className="text-base font-semibold text-stone-900">
           Intervention record
         </h2>
-        <p className="mt-1 text-xs leading-relaxed text-stone-500">
-          What was done, as distinct from what the engines found.{" "}
-          <span className="font-medium text-stone-700">&ldquo;Sent&rdquo;</span>{" "}
-          means the mail server accepted the message; it is not a read receipt.
-        </p>
+        {/* The sentence changes with what this deployment can actually
+            know. Before acknowledgment existed it could only apologise
+            that "sent" is not a read receipt; where receipts ARE
+            recorded it can draw the line itself, which is the whole
+            point of having added them. */}
+        {intervention.acknowledgment_available ? (
+          <p className="mt-1 text-xs leading-relaxed text-stone-500">
+            What was done, as distinct from what the engines found.{" "}
+            <span className="font-medium text-stone-700">&ldquo;Sent&rdquo;</span>{" "}
+            means the mail server accepted the message.{" "}
+            <span className="font-medium text-stone-700">
+              &ldquo;Confirmed received&rdquo;
+            </span>{" "}
+            means the student opened the link and said so — the only figure here
+            that comes from the student rather than from this system.
+          </p>
+        ) : (
+          <p className="mt-1 text-xs leading-relaxed text-stone-500">
+            What was done, as distinct from what the engines found.{" "}
+            <span className="font-medium text-stone-700">&ldquo;Sent&rdquo;</span>{" "}
+            means the mail server accepted the message; it is not a read receipt.
+            Receipt confirmation is not recorded on this deployment.
+          </p>
+        )}
       </header>
 
       {!intervention.available ? (
@@ -103,6 +122,23 @@ export default function InterventionRecord({
             // messages as people overstates how far the unit reached.
             hint="distinct people, not messages"
           />
+          {/* Directly after the contact figures, because that is the
+              point at which the reader is asking whether any of it
+              reached anyone. */}
+          {intervention.acknowledgment_available && (
+            <>
+              <Stat
+                value={intervention.alerts_acknowledged}
+                label="Confirmed received"
+                hint="by the student, not the mail server"
+              />
+              <Stat
+                value={intervention.students_acknowledged}
+                label="Students who confirmed"
+                hint="distinct people"
+              />
+            </>
+          )}
           <Stat value={intervention.alerts_automatic} label="Sent automatically" />
           <Stat value={intervention.alerts_manual} label="Sent by hand" />
           <Stat

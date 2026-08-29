@@ -85,6 +85,9 @@ export interface ReportStudentRow {
 
   alerts_sent: number;
   last_alert_at: string | null;
+  /** How many of those the student confirmed receiving, and when they last did. */
+  alerts_acknowledged: number;
+  last_acknowledged_at: string | null;
 }
 
 export interface ReportInterventionSummary {
@@ -99,6 +102,17 @@ export interface ReportInterventionSummary {
   alerts_manual: number;
   /** Distinct students, which is not the same as alerts sent. */
   students_contacted: number;
+
+  /**
+   * False when this deployment predates the acknowledgment columns.
+   * Separate from `available`: a working alerts feature that cannot
+   * record receipts is not an absent alerts feature, and zero
+   * confirmations there is a fact about the database, not the students.
+   */
+  acknowledgment_available: boolean;
+  alerts_acknowledged: number;
+  /** Distinct students who confirmed at least one message. */
+  students_acknowledged: number;
 
   reviews_resolved: number;
   reviews_pending: number;

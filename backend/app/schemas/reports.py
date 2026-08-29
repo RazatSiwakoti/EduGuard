@@ -128,6 +128,14 @@ class ReportStudentRow(BaseModel):
     alerts_sent: int = 0
     last_alert_at: Optional[datetime] = None
 
+    #: How many of those the student confirmed receiving, and when they
+    #: last did. Zero means either "not confirmed" or "cannot be
+    #: recorded on this deployment" - the intervention summary's
+    #: `acknowledgment_available` is what separates the two, and the
+    #: caveats say so in words.
+    alerts_acknowledged: int = 0
+    last_acknowledged_at: Optional[datetime] = None
+
 
 class ReportInterventionSummary(BaseModel):
     """
@@ -151,6 +159,18 @@ class ReportInterventionSummary(BaseModel):
     #: Distinct students contacted, which is not the same as alerts sent -
     #: one student can be emailed more than once over a semester.
     students_contacted: int = 0
+
+    #: False when this deployment predates the acknowledgment columns.
+    #: Separate from `available` on purpose: a working alerts feature
+    #: that cannot record receipts is not an absent alerts feature, and
+    #: zero confirmations on such a deployment is a fact about the
+    #: database rather than about the students.
+    acknowledgment_available: bool = False
+    #: Messages a student confirmed receiving.
+    alerts_acknowledged: int = 0
+    #: Distinct students who confirmed at least one - not the same
+    #: number, since one student can confirm three messages.
+    students_acknowledged: int = 0
 
     reviews_resolved: int = 0
     reviews_pending: int = 0

@@ -28,6 +28,8 @@ from app.api.routes.reports import router as reports_router
 from app.api.routes.analysis import router as analysis_router
 from app.api.routes.admin_criteria import router as admin_criteria_router
 from app.api.routes.acknowledge import router as acknowledge_router
+from app.api.routes.audit import router as audit_router
+
 
 
 app = FastAPI(
@@ -62,11 +64,8 @@ app.include_router(alerts_router)
 app.include_router(reports_router)
 app.include_router(analysis_router)
 app.include_router(admin_criteria_router)
-# PUBLIC, by design. Students have no account, so the acknowledgment
-# receipt is reachable with a token and nothing else. See the module
-# docstring in app/api/routes/acknowledge.py for what that token is and
-# why the GET does not write.
 app.include_router(acknowledge_router)
+app.include_router(audit_router)
 
 
 @app.on_event("startup")

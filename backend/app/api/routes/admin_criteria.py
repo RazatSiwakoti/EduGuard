@@ -34,15 +34,16 @@ unlock dialog, and a bug report respectively. Collapsing any two of them
 forces the client to pattern-match on English error text.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import require_role
 from app.database import get_db
 from app.models.enums import UserRole
 from app.models.unit import Unit
+from app.models.user import User
 from app.schemas.unit_shape import UnitShapeIn, UnitShapeOut
-from app.services import unit_composition
+from app.services import audit_service, unit_composition
 
 router = APIRouter(
     prefix="/admin/units/{unit_id}/criteria",
@@ -79,7 +80,9 @@ def get_unit_criteria(unit_id: int, db: Session = Depends(get_db)):
 def replace_unit_criteria(
     unit_id: int,
     payload: UnitShapeIn,
+    request: Request,
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.ADMIN)),
 ):
     """
     Replace the unit's assessments and tutorial setting.
@@ -90,10 +93,15 @@ def replace_unit_criteria(
 
     A payload that changes nothing is accepted and writes nothing, even
     while the unit is locked. The setup form GETs the shape and PUTs it
-    back, so pressing Save without editing must not consume an admin's
+        back, so pressing Save without editing must not consume an admin's
     one-shot unlock window.
     """
     unit = _get_unit_or_404(db, unit_id)
+
+    # Snapshot first: a whole-object replace leaves nothing behind to
+    # compare against, and "the shape changed" is not a fact anybody can
+    # act on six weeks later.
+    before = audit_service.shape_snapshot(unit_composition.get_unit_shape(db, unit))
 
     items = [item.model_dump() for item in payload.assessments]
 
@@ -113,6 +121,26 @@ def replace_unit_criteria(
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+        )
+
+    after = audit_service.shape_snapshot(shape)
+    summary = audit_service.describe_shape_change(before, after)
+    # A payload that changes nothing is accepted and writes nothing -
+    # the setup form GETs the shape and PUTs it back, and pressing Save
+    # without editing must not consume an unlock window. It must not
+    # produce an audit row either, for the same reason.
+    if summary:
+        audit_service.record(
+            db,
+            action=audit_service.CRITERIA_SHAPE_REPLACED,
+            actor=current_user,
+            unit=unit,
+            entity_type="unit",
+            entity_id=unit.id,
+            summary=f"{summary} Unit {unit.unit_code}.",
+            before=before,
+            after=after,
+            request=request,
         )
 
     db.commit()

@@ -195,8 +195,22 @@ check("section present", "Intervention record" in body)
 check("sent count printed", "Alerts sent" in body)
 check("failed counted separately", "Failed to send" in body)
 check("distinct students, not messages", "Distinct students contacted" in body)
-check("'sent' is qualified as not a read receipt",
-      "not a read receipt" in body.replace("\n", " "), body)
+# AMENDED BY THE ACKNOWLEDGMENT SECTION. This pinned one 2026 sentence
+# - "it is not a read receipt" - which was the only qualification the
+# document could offer before students could confirm receipt. Where
+# confirmation IS recorded the note now draws the distinction properly
+# instead of apologising for being unable to, so pinning the apology
+# would fail the moment the feature improved. What C2 must guarantee is
+# that "sent" is never left standing as though it meant "read".
+#
+# Whitespace is normalised because `pdftotext -layout` wraps a long
+# sentence with a newline AND the next line's indent, so a raw substring
+# search fails on text a reader can plainly see.
+_flat = " ".join(body.split())
+check("'sent' is never left standing as though it meant 'read'",
+      "not a read receipt" in _flat
+      or "from the student rather than from this system" in _flat,
+      _flat[:500])
 check("reviews counted", "Engine disagreements resolved" in body)
 
 heading("Footer and confidentiality")

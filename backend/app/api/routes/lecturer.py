@@ -13,12 +13,15 @@ the dashboard can never accidentally trigger a recompute just by being
 opened or refreshed.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import require_teaching_role
 from app.database import get_db
+from app.models.student import Student
+from app.models.unit import Unit
 from app.models.user import User
+from app.services import audit_service
 from app.schemas.dashboard import DashboardUnit, LecturerDashboardResponse
 from app.services.dashboard_service import (
     DEFAULT_CHECKPOINT_WEEK,
@@ -171,6 +174,7 @@ def update_student_note(
 
 @router.post("/students/{student_id}/review", response_model=StudentDetailResponse)
 def review_student_verdict(
+    request: Request,
     payload: StudentReviewSubmit,
     student_id: int = Path(..., ge=1),
     unit_id: int = Query(..., ge=1),
@@ -193,10 +197,40 @@ def review_student_verdict(
     the last, which is how a misclick gets corrected while the fact that
     it happened stays on record.
 
-    Returns the full refreshed card payload rather than a bare
+        Returns the full refreshed card payload rather than a bare
     confirmation, so the client re-renders the resolved tier, the new
     history entry and the cleared review prompt from one round trip.
     """
+    # STAGED BEFORE THE CALL, and that is deliberate.
+    #
+    # `submit_student_review` owns its own `db.commit()`. Recording afterwards would put the audit row in a SECOND transaction, so a
+    # failure between the two would leave a decision on a student's file with no record of who made it. `audit_service.record` only stages,
+    # so staging first means the service's commit carries both - and every path that does not reach that commit (ownership failure,
+    # ValueError, an unanalysed student) leaves the row uncommitted and discarded with the session.
+    # The consequence is that the summary describes the DECISION the lecturer submitted rather than the tier derived from it. That is
+    # arguably the more honest thing to audit: the tier is the system's conclusion, the decision is the human's act.
+    unit = db.get(Unit, unit_id)
+    student = db.get(Student, student_id)
+    audit_service.record(
+        db,
+        action=audit_service.VERDICT_OVERRIDDEN,
+        actor=current_user,
+        unit=unit,
+        student=student,
+        entity_type="final_verdict",
+        summary=(
+            f"Verdict overridden for {student.name if student else 'a student'} "
+            f"in {unit.unit_code if unit else 'a unit'} at week {checkpoint_week}: "
+            f"chose {payload.decision}."
+        ),
+        after={
+            "decision": payload.decision,
+            "comment": payload.comment,
+            "checkpoint_week": checkpoint_week,
+        },
+        request=request,
+    )
+
     try:
         detail = submit_student_review(
             db,

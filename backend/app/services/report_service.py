@@ -324,6 +324,8 @@ def _student_row(
     reviewer_name: Optional[str],
     alert_count: int,
     last_alert_at: Optional[datetime],
+    acknowledged_count: int = 0,
+    last_acknowledged_at: Optional[datetime] = None,
 ) -> dict:
     """
     One at-risk student with the figures behind their tier.
@@ -358,6 +360,12 @@ def _student_row(
         "requires_review": bool(verdict and verdict.requires_review),
         "alerts_sent": alert_count,
         "last_alert_at": last_alert_at,
+        # Confirmed by the student, not by the mail server. The two are
+        # different facts and the row carries both, because "we emailed
+        # them four times" and "they have never confirmed receiving one"
+        # is a sentence a lecturer needs to be able to read.
+        "alerts_acknowledged": acknowledged_count,
+        "last_acknowledged_at": last_acknowledged_at,
     }
 
     assessment_percentages: list[float] = []
@@ -409,7 +417,7 @@ def _intervention_summary(
     db: Session, unit_id: int, checkpoint_week: int
 ) -> tuple[dict, dict[int, tuple[int, Optional[datetime]]]]:
     """
-    What the lecturer did: alerts sent, reviews resolved.
+    What the lecturer did: alerts sent, receipts confirmed, reviews resolved.
 
     THE ALERTS HALF DEGRADES HONESTLY. Phase 7.8 may not be installed on
     a given deployment, so the table is checked for rather than assumed.
@@ -417,8 +425,18 @@ def _intervention_summary(
     which is a different and much worse claim than "this feature is not
     installed" - so `available` says which it is.
 
+    ACKNOWLEDGMENT DEGRADES ONE STEP FURTHER, AND SEPARATELY. A
+    deployment can have the alerts table without the acknowledgment
+    columns, because the columns arrived later. Folding that into
+    `available` would report a working alerts feature as absent;
+    ignoring it would crash the report on a database one migration
+    behind. So `acknowledgment_available` is its own flag, and zero
+    confirmed receipts on a deployment that cannot record them is
+    reported as "not recorded", never as "nobody confirmed".
+
     Also returns per-student alert counts, so the at-risk list can show
-    who has already been contacted without a second pass over the table.
+    who has already been contacted - and who confirmed - without a
+    second pass over the table.
     """
     summary = {
         "available": False,
@@ -429,10 +447,15 @@ def _intervention_summary(
         "alerts_automatic": 0,
         "alerts_manual": 0,
         "students_contacted": 0,
+        # Acknowledgment (Phase Email). See the docstring for why this
+        # has its own availability flag rather than sharing `available`.
+        "acknowledgment_available": False,
+        "alerts_acknowledged": 0,
+        "students_acknowledged": 0,
         "reviews_resolved": 0,
         "reviews_pending": 0,
     }
-    per_student: dict[int, tuple[int, Optional[datetime]]] = {}
+    per_student: dict[int, dict] = {}
 
     # Reviews are part of 7.7, which is a hard dependency of this
     # module, so they are counted unconditionally.
@@ -450,38 +473,95 @@ def _intervention_summary(
         from app.models.email_message import EmailMessage  # local: optional feature
 
         summary["available"] = True
+        summary["acknowledgment_available"] = "acknowledged_at" in {
+            column["name"] for column in inspect(db.bind).get_columns("email_messages")
+        }
+
+        # EXPLICIT COLUMNS, NOT THE WHOLE ENTITY, AND THIS IS THE WHOLE
+        # POINT OF THE FLAG ABOVE.
+        #
+        # `select(EmailMessage)` asks the database for every column the
+        # MODEL declares, not every column the TABLE has. On a
+        # deployment one migration behind, the model knows about
+        # `acknowledged_at` and the table does not, so the query fails
+        # before the availability flag is ever read - and the report
+        # 500s rather than degrading. Naming the columns keeps the
+        # missing one out of the SQL entirely.
+        #
+        # Found by dropping the column from a live SQLite database and
+        # re-running, not by reasoning about it: the flag alone looked
+        # completely correct.
+        columns = [
+            EmailMessage.student_id,
+            EmailMessage.status,
+            EmailMessage.trigger,
+            EmailMessage.queued_at,
+        ]
+        if summary["acknowledgment_available"]:
+            columns.append(EmailMessage.acknowledged_at)
 
         messages = db.execute(
-            select(EmailMessage).where(
+            select(*columns).where(
                 EmailMessage.kind == "student_alert",
                 EmailMessage.unit_id == unit_id,
             )
-        ).scalars().all()
+        ).all()
 
         contacted: set[int] = set()
+        acknowledged_students: set[int] = set()
         for message in messages:
+            student_id = message[0]
+            status = message[1]
+            trigger = message[2]
+            queued_at = _as_aware(message[3])
+            acknowledged_at = (
+                _as_aware(message[4])
+                if summary["acknowledgment_available"] else None
+            )
+
             summary["alerts_total"] += 1
-            if message.status == "sent":
+            if status == "sent":
                 summary["alerts_sent"] += 1
-            elif message.status == "failed":
+            elif status == "failed":
                 summary["alerts_failed"] += 1
             else:
                 summary["alerts_queued"] += 1
 
-            if message.trigger == "automatic":
+            if trigger == "automatic":
                 summary["alerts_automatic"] += 1
             else:
                 summary["alerts_manual"] += 1
 
-            if message.student_id is not None:
-                contacted.add(message.student_id)
-                count, latest = per_student.get(message.student_id, (0, None))
-                queued_at = _as_aware(message.queued_at)
-                if latest is None or (queued_at and queued_at > latest):
-                    latest = queued_at
-                per_student[message.student_id] = (count + 1, latest)
+            if acknowledged_at is not None:
+                summary["alerts_acknowledged"] += 1
+
+            if student_id is not None:
+                contacted.add(student_id)
+                if acknowledged_at is not None:
+                    acknowledged_students.add(student_id)
+
+                row = per_student.setdefault(
+                    student_id,
+                    {"count": 0, "last_alert_at": None,
+                     "acknowledged": 0, "last_acknowledged_at": None},
+                )
+                row["count"] += 1
+                if row["last_alert_at"] is None or (
+                    queued_at and queued_at > row["last_alert_at"]
+                ):
+                    row["last_alert_at"] = queued_at
+                if acknowledged_at is not None:
+                    row["acknowledged"] += 1
+                    if row["last_acknowledged_at"] is None or (
+                        acknowledged_at > row["last_acknowledged_at"]
+                    ):
+                        row["last_acknowledged_at"] = acknowledged_at
 
         summary["students_contacted"] = len(contacted)
+        # DISTINCT STUDENTS, not messages. One student can be emailed
+        # three times and confirm all three; counting messages would
+        # report three people reached.
+        summary["students_acknowledged"] = len(acknowledged_students)
 
     return summary, per_student
 
@@ -494,6 +574,7 @@ def _caveats(
     intervention_available: bool,
     now: datetime,
     stale : Optional[dict] = None,
+    intervention: Optional[dict] = None,
 ) -> list[str]:
     """
     The qualifications this document must carry.
@@ -573,6 +654,41 @@ def _caveats(
             "intervention record below counts resolved reviews only. It is not "
             "evidence that no students were contacted."
         )
+
+    # ------------------------------------------------------------------
+    # Acknowledgment
+    #
+    # "Sent" has always meant the mail server accepted the message. Now
+    # that a student can confirm receipt, the report can say which of
+    # those two things it is reporting - and it must, because the gap
+    # between them is exactly where an early-intervention claim fails.
+    # ------------------------------------------------------------------
+    data = intervention or {}
+    if intervention_available and data.get("alerts_sent"):
+        if not data.get("acknowledgment_available"):
+            # A deployment with alerts but without the acknowledgment
+            # columns. Reporting zero confirmations here would state
+            # something about students; this states something about the
+            # deployment, which is the true claim.
+            caveats.append(
+                "Receipt confirmation is not recorded on this deployment, so no "
+                "alert below can be shown as confirmed. This is not evidence "
+                "that students did not receive them."
+            )
+        elif not data.get("alerts_acknowledged"):
+            sent = data["alerts_sent"]
+            # "None of the 1 alert" is what the plural-aware version of
+            # this sentence produces, and it reads like a bug. One is
+            # common enough in a small unit to be worth its own sentence.
+            opener = (
+                "The alert sent has not been confirmed as received by the student."
+                if sent == 1 else
+                f"None of the {sent} alerts sent have been confirmed as received."
+            )
+            caveats.append(
+                f"{opener} A message the mail server accepted is not a message "
+                "a person has read."
+            )
 
     return caveats
 
@@ -678,13 +794,16 @@ def build_unit_report(
                 pending_reviews += 1
 
         if bucket in AT_RISK_BUCKETS:
-            count, latest = alerts_per_student.get(student.id, (0, None))
+            contact = alerts_per_student.get(student.id) or {}
             at_risk.append(
                 _student_row(
                     student, verdict, bucket, criteria, events,
                     rule_score, ml_score,
                     reviewer_names.get(verdict.reviewed_by) if verdict else None,
-                    count, latest,
+                    contact.get("count", 0),
+                    contact.get("last_alert_at"),
+                    contact.get("acknowledged", 0),
+                    contact.get("last_acknowledged_at"),
                 )
             )
 
@@ -722,6 +841,7 @@ def build_unit_report(
         "caveats": _caveats(
             criteria, buckets, incomplete_count, last_analysed_at,
             intervention["available"], now,
+            intervention=intervention,
             # Scoped to THIS checkpoint. A week-4 analysis going stale is not a caveat on the week-8 report the reader is holding.
             stale = unit_composition.stale_verdict_summary(
                 db, unit, checkpoint_week=checkpoint_week

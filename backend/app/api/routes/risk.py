@@ -3,7 +3,7 @@ Risk scoring routes - Phase 5.2. Rule-based engine only for now; ML and
 hybrid reconciliation land in later steps of this phase.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import require_teaching_role
@@ -19,6 +19,7 @@ from app.models.enrollment import Enrollment
 from app.services.analysis_service import run_analysis_for_students
 from app.schemas.risk import VerdictReviewSubmit, PendingReviewItem, VerdictReviewResult
 from app.services.final_verdict_service import submit_review_decision
+from app.services import audit_service
 
 
 router = APIRouter(prefix="/units/{unit_id}/students/{student_id}/risk", tags=["Risk Scoring"])
@@ -208,6 +209,7 @@ def review_verdict(
     unit_id: int,
     verdict_id: int,
     payload: VerdictReviewSubmit,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_teaching_role()),
 ):
@@ -216,15 +218,54 @@ def review_verdict(
 
     verdict = db.query(FinalVerdict).filter(FinalVerdict.id == verdict_id).first()
     if not verdict:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Verdict not found")
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Verdict not found")
     if verdict.unit_id != unit_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Verdict does not belong to this unit")
+
+    # Captured before the decision lands. The verdict row is mutated in
+    # place, so after the call there is no way to say what tier the
+    # engines had produced - which is the single most useful thing an
+    # override row can record.
+    tier_before = verdict.final_tier
+    was_pending = bool(verdict.requires_review)
 
     try:
         updated = submit_review_decision(
             db, verdict_id, current_user.id, payload.review_decision, payload.comment
         )
-        
+
+        student = db.get(Student, updated.student_id)
+        audit_service.record(
+            db,
+            action=audit_service.VERDICT_OVERRIDDEN,
+            actor=current_user,
+            unit=unit,
+            student=student,
+            entity_type="final_verdict",
+            entity_id=updated.id,
+            summary=(
+                f"Verdict overridden for {student.name if student else 'a student'} "
+                f"in {unit.unit_code} at week {updated.checkpoint_week}: "
+                f"{tier_before or 'undecided'} to {updated.final_tier or 'undecided'} "
+                f"(chose {payload.review_decision})."
+            ),
+            before={
+                "final_tier": tier_before,
+                "requires_review": was_pending,
+            },
+            after={
+                "final_tier": updated.final_tier,
+                "requires_review": bool(updated.requires_review),
+                "decision": payload.review_decision,
+                # The comment is the lecturer's stated reason. It is the
+                # part of an override a reader most wants and the part
+                # least likely to be reconstructable from anything else.
+                "comment": payload.comment,
+            },
+            request=request,
+        )
+
+        # One commit for the decision and its audit row.
         db.commit()
         db.refresh(updated)
     except ValueError as e:

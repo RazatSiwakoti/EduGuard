@@ -91,6 +91,11 @@ export const BUCKET_STYLES: Record<RiskBucket, BucketStyle> = {
     pill: "bg-violet-50 text-violet-700 ring-violet-200",
     hint: "Rule engine and ML model disagreed — awaiting your decision",
   },
+  incomplete: {
+    fill: "...",
+    pill: "...",
+    hint: "...",
+  },
   not_analysed: {
     fill: "#898781", // muted grey — absence of data, deliberately dull
     pill: "bg-stone-100 text-stone-600 ring-stone-200",

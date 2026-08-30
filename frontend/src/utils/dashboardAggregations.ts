@@ -32,6 +32,7 @@ export const BUCKET_LABELS: Record<RiskBucket, string> = {
   low_risk: "Low Risk",
   high_risk: "High Risk",
   needs_review: "Needs Review",
+  incomplete: "Incomplete Data",
   not_analysed: "Not Analysed",
 };
 
@@ -45,6 +46,7 @@ export const BUCKET_ORDER: RiskBucket[] = [
   "low_risk",
   "safe",
   "needs_review",
+  "incomplete",
   "not_analysed",
 ];
 
@@ -89,6 +91,7 @@ export const MOMENTUM_BAND_PP = 10;
  */
 export function getBucket(student: DashboardStudent): RiskBucket {
   if (!student.analysed) return "not_analysed";
+  if (student.is_incomplete) return "incomplete";
   if (student.requires_review || student.final_tier === null) return "needs_review";
   return student.final_tier;
 }
@@ -205,6 +208,7 @@ export interface UnitRiskRow {
   low_risk: number;
   high_risk: number;
   needs_review: number;
+  incomplete: number;
   not_analysed: number;
 }
 
@@ -232,6 +236,7 @@ export function riskByUnit(
       low_risk: 0,
       high_risk: 0,
       needs_review: 0,
+      incomplete: 0,
       not_analysed: 0,
     });
   }

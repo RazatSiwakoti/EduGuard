@@ -64,6 +64,9 @@ export interface StudentAnalysisResult {
   ml_level: string;
   final_tier: string | null;
   requires_review: boolean;
+
+  is_incomplete: boolean;
+  missing_criteria: string[];
 }
 
 export interface AnalysisSummary {

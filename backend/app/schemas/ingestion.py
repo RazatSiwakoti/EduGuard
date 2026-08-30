@@ -66,6 +66,8 @@ class StudentAnalysisResult(BaseModel):
     ml_level: str
     final_tier: Optional[str]
     requires_review: bool
+    is_incomplete: bool = False
+    missing_criteria: list[str] = []
 
 
 class AnalysisSummary(BaseModel):

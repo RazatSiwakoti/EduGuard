@@ -9,11 +9,15 @@ export type RiskTier = "safe" | "low_risk" | "high_risk";
  *    pick a winner. final_tier is NULL until a lecturer resolves it.
  *  - "not_analysed": the student is enrolled and may even have uploaded
  *    data, but the analysis pipeline has never produced a verdict.
- *
+ *  - "incomplete": analysis ran, but one or both engines detected
+ *   missing academic input. The calculated tiers may still exist
+ *   internally, but the dashboard must not present the final tier
+ *   as authoritative.
+ *  - "not_analysed": no verdict has ever been produced.
  * Both are shown rather than hidden — a lecturer needs to know their
  * cohort has unresolved cases, not see them quietly vanish from a chart.
  */
-export type RiskBucket = RiskTier | "needs_review" | "not_analysed";
+export type RiskBucket = RiskTier | "needs_review" | "not_analysed"| "incomplete";
 export interface DashboardUnitCriterion {
   id: number;
   name: string;

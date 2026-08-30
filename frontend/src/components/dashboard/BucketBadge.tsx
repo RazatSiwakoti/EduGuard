@@ -1,5 +1,6 @@
 import {
   CircleDashed,
+  CircleAlert,
   OctagonAlert,
   Scale,
   ShieldCheck,
@@ -25,6 +26,7 @@ const BUCKET_ICONS: Record<RiskBucket, LucideIcon> = {
   low_risk: TriangleAlert,
   safe: ShieldCheck,
   needs_review: Scale, // Scales = two engines weighed against each other.
+  incomplete: CircleAlert, // Scales = two engines weighed against each other.
   not_analysed: CircleDashed, // Dashed outline = nothing measured yet.
 };
 

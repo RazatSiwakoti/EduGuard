@@ -49,6 +49,18 @@ def run_analysis_for_student(
         "ml_level": ml_score.risk_level,
         "final_tier": verdict.final_tier,
         "requires_review": verdict.requires_review,
+
+         "is_incomplete": (
+        bool(rule_score.is_incomplete)
+        or bool(ml_score.is_incomplete)
+      ),
+
+    "missing_criteria": sorted(
+        set(
+            (rule_score.missing_criteria or [])
+            + (ml_score.missing_criteria or [])
+        )
+      ),
     }
 
 

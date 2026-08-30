@@ -212,7 +212,7 @@ export default function StudentTable({ students }: StudentTableProps) {
                           never learn the data was patchy. */}
                       {student.is_incomplete && (
                         <span
-                          title="Scored with incomplete data — treat this verdict with caution"
+                          title="Incomplete academic data — no final risk verdict is shown"
                           className="shrink-0 text-amber-500"
                         >
                           <CircleAlert className="h-4 w-4" aria-hidden="true" />
@@ -223,9 +223,23 @@ export default function StudentTable({ students }: StudentTableProps) {
                   </td>
 
                   <td className="px-4 py-3 text-stone-600">{student.unit_code}</td>
+                  
+                  {/* The BucketBadge as a warning only. */}
+                  {/* <td className="px-4 py-3">
+                    <BucketBadge bucket={bucket} />
+                  </td> */}
 
                   <td className="px-4 py-3">
-                    <BucketBadge bucket={bucket} />
+                    {student.is_incomplete ? (
+                      <span
+                        className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700"
+                        title="The student does not have enough complete data for a final risk verdict."
+                      >
+                        Incomplete Data
+                      </span>
+                    ) : (
+                      <BucketBadge bucket={bucket} />
+                    )}
                   </td>
 
                   <td className="px-4 py-3 text-xs text-stone-600">

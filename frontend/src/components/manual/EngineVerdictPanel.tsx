@@ -95,7 +95,38 @@ export default function EngineVerdictPanel({
       </div>
     );
   }
+  
+  if (analysis.is_incomplete) {
+  return (
+    <div className="space-y-4">
+      <div className="rounded-lg border border-amber-200 bg-amber-50 p-5">
+        <h3 className="text-sm font-semibold text-amber-900">
+          {outcome.headline}
+        </h3>
 
+        <p className="mt-1.5 text-xs leading-relaxed text-amber-900">
+          {outcome.detail} Some required academic data is still missing, so this
+          student's risk status is marked as incomplete rather than treated as safe.
+        </p>
+
+        {analysis.missing_criteria.length > 0 && (
+          <p className="mt-2 text-[11px] text-amber-800">
+            Missing: {analysis.missing_criteria.join(", ")}
+          </p>
+        )}
+      </div>
+
+      <button
+        type="button"
+        onClick={onAddAnother}
+        className="rounded-md bg-stone-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-stone-800"
+      >
+        Add another student
+      </button>
+    </div>
+  );
+ }
+ 
   const agreed = analysis.rule_level === analysis.ml_level;
 
   return (

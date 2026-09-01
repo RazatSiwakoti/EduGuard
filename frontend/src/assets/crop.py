@@ -4,8 +4,8 @@ from pathlib import Path
 # Folder where this Python script is located
 folder = Path(__file__).parent
 
-input_path = folder / "CRr.png"
-output_path = folder / "CRr_cropped.png"
+input_path = folder / "edlogo.png"
+output_path = folder / "edlogo_cropped.png"
 
 img = Image.open(input_path).convert("RGBA")
 

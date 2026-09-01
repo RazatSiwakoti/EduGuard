@@ -56,6 +56,12 @@ def seed_default_criteria(db: Session, unit: Unit) -> None:
     db.add(moodle)
 
 
+def update_unit(db: Session, unit: Unit, update_data: dict) -> None:
+    """Apply a subset of unit fields, preserving the route's exclude_unset logic."""
+    for field, value in update_data.items():
+        setattr(unit, field, value)
+
+
 def assign_lecturer(db: Session, unit: Unit, lecturer_id: int) -> None:
     """Overwrites directly - no unassign-first step required."""
     unit.lecturer_id = lecturer_id

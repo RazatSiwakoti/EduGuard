@@ -213,8 +213,7 @@ def update_unit(unit_id: int, payload: UnitUpdate, db: Session = Depends(get_db)
                 )
             unit.class_code = new_class_code
 
-    for field, value in update_data.items():
-        setattr(unit, field, value)
+    unit_service.update_unit(db, unit, update_data)
 
     db.commit()
     db.refresh(unit)

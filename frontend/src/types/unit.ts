@@ -19,6 +19,16 @@ export const CLASS_TYPES: { value: ClassType; label: string; numbered: boolean }
   { value: "NCLA", label: "NCLA — non-campus class", numbered: false },
 ];
 
+export const UNIT_LEVELS = [
+  { value: "diploma", label: "Diploma" },
+  { value: "bachelor", label: "Bachelor" },
+  { value: "masters", label: "Masters" },
+] as const;
+
+export const TEACHING_PERIODS = ["T1", "T2", "T3"] as const;
+
+export type UnitLevel = (typeof UNIT_LEVELS)[number]["value"];
+
 export interface Unit {
   id: number;
   /** The SUBJECT, e.g. "ICT730". Shared by every class of it. */
@@ -33,7 +43,7 @@ export interface Unit {
   start_date: string;
   year: number | null;
   teaching_period: string | null;
-  level: string | null;
+  level: UnitLevel | null;
   lecturer_id: number | null;
   status: UnitStatus;
   is_active: boolean;
@@ -59,6 +69,8 @@ export interface CreateUnitRequest {
 export interface UpdateUnitRequest {
   unit_name?: string;
   start_date?: string;
+  year?: number | null;
+  teaching_period?: string | null;
   level?: string | null;
   /**
    * Send BOTH or neither. A class code is a label rather than a rule —

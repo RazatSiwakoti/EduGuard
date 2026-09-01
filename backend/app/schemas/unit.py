@@ -15,6 +15,8 @@ from app.services.class_code import CLASS_TYPES
 #: from pydantic before it ever reaches the service. The vocabulary is
 #: locked deliberately - see app/services/class_code.py.
 ClassTypeIn = Literal["LA", "NCLA"]
+TeachingPeriodIn = Literal["T1", "T2", "T3"]
+UnitLevelIn = Literal["diploma", "bachelor", "masters"]
 
 
 class UnitCreate(BaseModel):
@@ -22,8 +24,8 @@ class UnitCreate(BaseModel):
     unit_name: str = Field(..., min_length=1, max_length=255)
     start_date: Optional[date] = None
     year: int = Field(..., ge=2000, le=2100)
-    teaching_period: str = Field(..., min_length=1, max_length=20)
-    level: Optional[str] = Field(None, max_length=20)  # "bachelor" / "master"
+    teaching_period: TeachingPeriodIn
+    level: UnitLevelIn
     lecturer_id: Optional[int] = None
 
     #: Which of the subject's parallel classes this is. Both optional:
@@ -37,7 +39,9 @@ class UnitCreate(BaseModel):
 class UnitUpdate(BaseModel):
     unit_name: Optional[str] = Field(None, min_length=1, max_length=255)
     start_date: Optional[date] = None
-    level: Optional[str] = Field(None, max_length=20)
+    year: Optional[int] = Field(None, ge=2000, le=2100)
+    teaching_period: Optional[TeachingPeriodIn] = None
+    level: Optional[UnitLevelIn] = None
 
     #: Editable after creation. A class code is a LABEL, not a rule - it
     #: changes nothing about how a student is scored - so the same

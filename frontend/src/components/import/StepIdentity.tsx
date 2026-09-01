@@ -94,7 +94,6 @@ export default function StepIdentity({
           />
           <ColumnSelect
             label="Gender"
-            hint="Used by the ML model as a feature"
             value={identity.gender_col}
             columns={columns}
             onChange={(value) => set("gender_col", value)}
@@ -102,7 +101,6 @@ export default function StepIdentity({
           />
           <ColumnSelect
             label="Age"
-            hint="Used by the ML model as a feature"
             value={identity.age_col}
             columns={columns}
             onChange={(value) => set("age_col", value)}

@@ -5,6 +5,7 @@ import { CATEGORY_COLUMN_COUNT, FIXED_CATEGORIES } from "../../types/criteria";
 import type { ManualEntryCreate } from "../../types/ingestion";
 import { ATTENDANCE_ABSENT } from "../../types/ingestion";
 import { CATEGORY_LABELS } from "../../utils/dashboardAggregations";
+import { studentEmailFor } from "../../utils/studentEmail";
 import { useManualEntry } from "../../hooks/useIngestion";
 import EngineVerdictPanel from "./EngineVerdictPanel";
 import { WeeklyAttendanceInput, WeeklyTutorialInput } from "./WeeklyInputs";
@@ -190,7 +191,13 @@ export default function ManualEntryForm({
             label="Student number"
             required
             value={student.student_number}
-            onChange={(value) => setStudent({ ...student, student_number: value })}
+            onChange={(value) =>
+              setStudent({
+                ...student,
+                student_number: value,
+                email: studentEmailFor(value),
+              })
+            }
           />
           <Field
             label="Full name"
@@ -202,6 +209,8 @@ export default function ManualEntryForm({
             label="Email"
             type="email"
             value={student.email}
+            readOnly
+            hint="Generated from the student number — KOI student addresses only"
             onChange={(value) => setStudent({ ...student, email: value })}
           />
           <Field
@@ -212,9 +221,6 @@ export default function ManualEntryForm({
 
           <label className="block">
             <span className="block text-xs font-medium text-stone-700">Gender</span>
-            <span className="mt-0.5 block text-[11px] text-stone-400">
-              Used by the ML model as a feature
-            </span>
             <select
               value={student.gender}
               onChange={(event) =>
@@ -231,7 +237,6 @@ export default function ManualEntryForm({
           <Field
             label="Age"
             type="number"
-            hint="Used by the ML model as a feature"
             value={student.age}
             onChange={(value) => setStudent({ ...student, age: value })}
           />
@@ -319,7 +324,7 @@ export default function ManualEntryForm({
                   hint={
                     category === "moodle"
                       ? "A raw count of logins, not a percentage"
-                      : `Threshold for this criterion is ${criterion.threshold}%`
+                      : undefined
                   }
                   value={scores[criterion.id] ?? ""}
                   onChange={(value) =>
@@ -425,6 +430,7 @@ interface FieldProps {
   required?: boolean;
   type?: string;
   hint?: string;
+  readOnly?: boolean;
 }
 
 /** A labelled text input, matching ColumnSelect's shape and spacing. */
@@ -435,6 +441,7 @@ function Field({
   required = false,
   type = "text",
   hint,
+  readOnly = false,
 }: FieldProps) {
   return (
     <label className="block">
@@ -446,8 +453,13 @@ function Field({
       <input
         type={type}
         value={value}
+        readOnly={readOnly}
         onChange={(event) => onChange(event.target.value)}
-        className="mt-1.5 w-full rounded-md border border-stone-200 bg-white px-2.5 py-1.5 text-sm text-stone-900 outline-none transition focus:border-stone-400"
+        className={`mt-1.5 w-full rounded-md border px-2.5 py-1.5 text-sm outline-none transition ${
+          readOnly
+            ? "cursor-not-allowed border-stone-200 bg-stone-50 text-stone-500"
+            : "border-stone-200 bg-white text-stone-900 focus:border-stone-400"
+        }`}
       />
     </label>
   );

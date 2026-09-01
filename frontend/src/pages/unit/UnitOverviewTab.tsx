@@ -97,7 +97,7 @@ export default function UnitOverviewTab() {
                         {criterion.name}
                         {isFixed && (
                           <span
-                            title="Fixed for every unit — weight and threshold come from the risk engine's constants"
+                            title="Tracked automatically for every unit — no marks or pass mark to set"
                             className="inline-flex items-center gap-1 rounded bg-stone-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-stone-500"
                           >
                             <Lock className="h-2.5 w-2.5" aria-hidden="true" />

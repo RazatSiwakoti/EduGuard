@@ -140,6 +140,7 @@ export default function UnitCompositionPanel({ unitId }: UnitCompositionPanelPro
     ...shape.assessments,
     ...(shape.tutorial ? [shape.tutorial] : []),
   ];
+  const totalMarks = items.reduce((sum, criterion) => sum + (criterion.max_score ?? 0), 0);
 
   return (
     <section className="rounded-lg border border-stone-200 bg-white p-5">
@@ -198,7 +199,7 @@ export default function UnitCompositionPanel({ unitId }: UnitCompositionPanelPro
               entirely, with nothing to say it was there. */}
           <table className="w-full text-sm">
             <caption className="sr-only">
-              Assessments in {shape.unit_code} and their pass marks
+              Assessments in {shape.unit_code}, their total marks and pass marks
             </caption>
             <thead>
               <tr className="border-b border-stone-200 text-left text-xs font-medium text-stone-500">
@@ -206,10 +207,7 @@ export default function UnitCompositionPanel({ unitId }: UnitCompositionPanelPro
                   Component
                 </th>
                 <th scope="col" className="pb-2 text-right">
-                  Worth
-                </th>
-                <th scope="col" className="hidden pb-2 text-right sm:table-cell">
-                  Marked out of
+                  Marks
                 </th>
                 <th scope="col" className="pb-2 text-right">
                   Pass mark
@@ -230,16 +228,9 @@ export default function UnitCompositionPanel({ unitId }: UnitCompositionPanelPro
                     )}
                   </td>
                   <td className="py-2.5 text-right tabular-nums text-stone-600">
-                    {criterion.percentage}%
-                  </td>
-                  {/* The tutorial's max_score is 100 because its stored
-                      score is already a completion percentage, not a
-                      raw mark — so it is labelled, not left to read as
-                      "marked out of 100". */}
-                  <td className="hidden py-2.5 text-right tabular-nums text-stone-600 sm:table-cell">
                     {criterion.category === "weekly_tut"
                       ? "% completed"
-                      : criterion.max_score}
+                      : criterion.max_score ?? 0}
                   </td>
                   <td className="py-2.5 text-right tabular-nums text-stone-900">
                     {criterion.pass_mark === null
@@ -259,10 +250,11 @@ export default function UnitCompositionPanel({ unitId }: UnitCompositionPanelPro
                     : "The unit is fully accounted for"}
                 </td>
                 <td className="pt-2 text-right font-medium tabular-nums text-stone-700">
+                  {totalMarks}
+                </td>
+                <td className="pt-2 text-right font-medium tabular-nums text-stone-700">
                   {shape.total_percentage}%
                 </td>
-                <td className="hidden sm:table-cell" />
-                <td />
               </tr>
             </tfoot>
           </table>
@@ -275,9 +267,9 @@ export default function UnitCompositionPanel({ unitId }: UnitCompositionPanelPro
           <p className="mt-3 flex gap-2 text-xs leading-relaxed text-stone-500">
             <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-stone-400" aria-hidden="true" />
             <span>
-              Attendance and Moodle activity are scored automatically for every
-              unit, sit outside this 100%, and their pass marks are fixed by the
-              risk engine.
+              Students must score at least 50% in every component to pass.
+              Attendance and Moodle activity are tracked for every unit and sit
+              outside this 100%.
             </span>
           </p>
 

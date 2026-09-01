@@ -143,7 +143,7 @@ export default function EngineVerdictPanel({
           <EngineCard
             icon={SlidersHorizontal}
             label="Rule engine"
-            detail="Your thresholds and weights"
+            detail="Your marks and pass marks"
             tier={analysis.rule_level as RiskTier}
           />
           <EngineCard

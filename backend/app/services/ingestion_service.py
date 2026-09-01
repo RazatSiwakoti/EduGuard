@@ -76,10 +76,25 @@ def resolve_or_create_student(
                 f"Student {student_number} details differ from upload: "
                 f"{', '.join(mismatches)} - record was NOT updated."
             )
+
+        if email and not email.lower().endswith("@students.koi.edu.au"):
+            extra = (
+                f"Student {student_number} email '{email}' is not a KOI student address "
+                "and was left unchanged."
+            )
+            warning = f"{warning} {extra}" if warning else extra
+
         return student, warning
 
     if not name:
         raise ValueError(f"Cannot create new student '{student_number}': name is required")
+
+    warning = None
+    if email and not email.lower().endswith("@students.koi.edu.au"):
+        warning = (
+            f"Student {student_number} email '{email}' is not a KOI student address "
+            "and was kept as provided."
+        )
 
     student = Student(
         student_number=student_number, name=name, email=email,
@@ -87,7 +102,7 @@ def resolve_or_create_student(
     )
     db.add(student)
     db.flush()  # need student.id for enrollment/event creation below
-    return student, None
+    return student, warning
 
 
 def resolve_or_create_enrollment(db: Session, student_id: int, unit_id: int) -> Enrollment:

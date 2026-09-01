@@ -307,6 +307,8 @@ def process_bulk_upload(
 
     for row_number, row in enumerate(rows, start=1):
         student_number = row.get(student_number_col)
+        if student_number is not None:
+             student_number = str(student_number).strip()
         name = row.get(name_col)
         email = row.get(email_col) if email_col else None
         program = row.get(program_col) if program_col else None
@@ -330,9 +332,26 @@ def process_bulk_upload(
 
         resolve_or_create_enrollment(db, student.id, unit_id)
 
+        # Every criterion this row left blank, collected across the loop
+        # and reported as ONE warning after it.
+        #
+        # One warning per empty cell would put four lines on screen for a
+        # student who is simply early in the trimester, and a warning
+        # panel that long is scrolled past rather than read. The criteria
+        # names are what the lecturer acts on, so they are joined into a
+        # single sentence naming the student once.
+        blank_criteria: list[str] = []
+
         for criteria_id, column_name in criteria_column_map.items():
             raw_value = row.get(column_name)
             if raw_value in (None, ""):
+                # NOT an error, and the row is NOT rejected. An empty
+                # assessment cell in week 4 is the ordinary state of a
+                # trimester, not a broken file. It is recorded because
+                # the scoring engines now refuse to state a tier without
+                # enough evidence, and a lecturer who cannot see WHICH
+                # marks are missing has no way to act on that refusal.
+                blank_criteria.append(criteria_lookup[criteria_id].name)
                 continue
 
             criteria = criteria_lookup[criteria_id]
@@ -360,6 +379,22 @@ def process_bulk_upload(
             db.add(event)
             success_count += 1
             touched_student_ids.add(student.id)
+
+        if blank_criteria:
+            # The student is named, not just the row number. A lecturer
+            # chasing a missing mark searches Moodle by name; a warning
+            # reading "row 43" makes them reopen the spreadsheet first.
+            who = student.name or student_number
+            warnings.append({
+                "row": row_number,
+                "student_number": student_number,
+                "criteria": ", ".join(blank_criteria),
+                "message": (
+                    f"{who} has no mark for {', '.join(blank_criteria)}. "
+                    "The row was imported; these criteria were left unscored, "
+                    "which may hold the student's risk level back for review."
+                ),
+            })
 
         for criteria_id, weekly_columns in weekly_criteria_column_map.items():
             criteria = criteria_lookup[criteria_id]

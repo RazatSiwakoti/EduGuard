@@ -36,10 +36,48 @@ def get_latest_score(db: Session, student_id: int, unit_id: int, source: str, ch
     )
 
 
+def insufficient_evidence(score: RiskScore) -> bool:
+    """
+    Whether this engine saw too little of the student to state a tier.
+
+    NULL coverage returns False, and that is deliberate rather than
+    cautious-by-default. Every score computed before the coverage column
+    existed has NULL, and treating "not measured" as "insufficient"
+    would push every historical student into the review queue the moment
+    this shipped - thousands of rows nobody can action, which is how a
+    review queue becomes something people close without reading. Those
+    verdicts stay exactly as they were until the next analysis run
+    measures them properly.
+    """
+    return score.coverage is not None and score.coverage < MIN_EVIDENCE_COVERAGE
+
+
+def describe_coverage(score: RiskScore) -> str:
+    """A phrase naming what this engine did not see."""
+    share = f"{(score.coverage or 0.0) * 100:.0f}%"
+    missing = score.missing_criteria or "some criteria"
+    return f"{score.source} scored only {share} of the evidence (missing: {missing})"
+
+
 def build_reason(rule_score: RiskScore, ml_score: RiskScore, requires_review: bool) -> str:
     """Combines both engines' own stored explanations into one final
     reason. If review is required, that's stated up front."""
     combined = f"{rule_score.explanation or ''} {ml_score.explanation or ''}".strip()
+
+    # TWO DIFFERENT REASONS FOR THE SAME OUTCOME, and a lecturer opening
+    # the queue needs to know which one they are looking at. "The engines
+    # disagreed" is a question about the model; "half this student's
+    # record is missing" is a question about the data, and only one of
+    # them is answered by looking harder at the student.
+    thin = [score for score in (rule_score, ml_score) if insufficient_evidence(score)]
+    if thin:
+        return (
+            "Not enough evidence to state a risk level: "
+            + "; ".join(describe_coverage(score) for score in thin)
+            + ". A missing mark is not a passing mark, so no tier is claimed. "
+            + combined
+        ).strip()
+
     if requires_review:
         return (
             f"Rule engine ({rule_score.risk_level}) and ML model ({ml_score.risk_level}) "
@@ -144,21 +182,40 @@ def compute_and_stage_final_verdict(
 
     hybrid_result = reconcile(RiskTier(rule_score.risk_level), RiskTier(ml_score.risk_level))
 
+    # THE COVERAGE GATE.
+    #
+    # Both engines rescale their blend onto whatever evidence exists, so
+    # a student with no assessment marks is scored across attendance and
+    # tutorials alone and can earn a perfect result on two thirds of a
+    # unit nobody looked at. The tiers above are computed from real
+    # numbers; they are simply not entitled to be believed.
+    #
+    # This routes those students into the review workflow that already
+    # exists for engine disagreement - same violet bucket, same queue,
+    # same lecturer decision, same carry-forward. Nothing new to build,
+    # and a human decides instead of the system guessing "safe".
+    #
+    # It can only ever ADD a review, never remove one: a genuine
+    # disagreement stays a disagreement.
+    starved = insufficient_evidence(rule_score) or insufficient_evidence(ml_score)
+    requires_review = hybrid_result.requires_review or starved
+    final_tier = None if requires_review else hybrid_result.final_tier
+
     verdict = FinalVerdict(
         student_id=student_id,
         unit_id=unit_id,
         checkpoint_week=checkpoint_week,
         rule_score_id=rule_score.id,
         ml_score_id=ml_score.id,
-        final_tier=hybrid_result.final_tier.value if hybrid_result.final_tier else None,
-        requires_review=hybrid_result.requires_review,
-        reason=build_reason(rule_score, ml_score, hybrid_result.requires_review),
+        final_tier=final_tier.value if final_tier else None,
+        requires_review=requires_review,
+        reason=build_reason(rule_score, ml_score, requires_review),
     )
 
     # Only ever applied to a verdict the engines could NOT resolve. A
     # verdict they agreed on is an engine result and must stay one - a
     # stale human decision has no business overriding a fresh consensus.
-    if hybrid_result.requires_review:
+    if requires_review:
         review = get_latest_review(db, student_id, unit_id, checkpoint_week)
         if review_still_applies(review, rule_score.risk_level, ml_score.risk_level):
             apply_review_to_verdict(verdict, review)

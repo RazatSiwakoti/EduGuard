@@ -124,7 +124,7 @@ def build_ml_features(db: Session, student_id: int, unit_id: int) -> tuple[dict,
     else:
         notes.append("assessment_avg_pct (structurally absent - unit has no assessment criteria)")
 
-        return features, notes
+    return features, notes
 
 
 def missing_feature_keys(features: dict) -> list[str]:

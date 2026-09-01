@@ -57,6 +57,11 @@ class IngestionRowError(BaseModel):
 class IngestionRowWarning(BaseModel):
     row: Optional[int] = None
     student_number: Optional[str] = None
+    # Declared so a blank-cell warning carries the criteria names as a
+    # field, not only buried in the prose. Pydantic would silently drop
+    # the extra key otherwise, and the frontend could never group
+    # warnings by which mark is missing.
+    criteria: Optional[str] = None
     message: str
 
 

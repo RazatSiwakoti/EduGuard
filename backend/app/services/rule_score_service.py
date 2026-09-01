@@ -153,6 +153,10 @@ def compute_and_stage_rule_score(
         checkpoint_week=checkpoint_week,
         is_incomplete=len(missing_categories) > 0,
         missing_criteria=", ".join(missing_categories) if missing_categories else None,
+        # How much of the unit's weight this score actually saw. Without
+        # it a 0.0 across every criterion and a 0.0 across one of five
+        # are indistinguishable, and they mean opposite things.
+        coverage=result.coverage,
         explanation=build_rule_explanation(result),
     )
     db.add(risk_score)

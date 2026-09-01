@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from typing import Optional
 
+from app.core.risk_constants import MIN_EVIDENCE_COVERAGE
 from app.models.risk_score import RiskScore
 from app.models.final_verdicts import FinalVerdict
 from app.models.verdict_review import VerdictReview

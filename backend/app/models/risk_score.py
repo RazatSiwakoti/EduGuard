@@ -19,7 +19,7 @@ class RiskScore(Base):
 
     is_incomplete = Column(Boolean, nullable=False, default=False)
     missing_criteria = Column(String, nullable=True)
-
+    coverage = Column(Float, nullable=True)
     # Human-readable explanation of THIS engine's own decision - rule
     # engine populates from its per-criterion badness breakdown, ML
     # engine populates from SHAP's top contributing features.

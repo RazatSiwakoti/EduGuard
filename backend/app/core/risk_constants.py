@@ -29,3 +29,25 @@ TUTORIAL_STATUS_CREDIT = {
     "late": 0.8,
     "not_submitted": 0.0,
 }
+
+# ---------------------------------------------------------------------
+# Evidence coverage
+#
+# The share of a unit's total criterion weight that must actually have
+# data behind it before either engine is allowed to state a tier.
+#
+# WHY THIS EXISTS. Both engines used to drop a criterion with no data
+# from BOTH sides of the weighted average, which silently rescaled the
+# blend onto whatever evidence happened to exist. A student with no
+# assessment marks was scored purely on attendance and tutorials, scored
+# a perfect 0.0000 badness, and was reported SAFE - and a student with
+# NO data at all scored 0.0000 too, because zero is not a neutral value
+# here, it is the best possible one.
+#
+# 0.70 rather than something stricter: a student missing only their
+# Moodle datum still has 96% of the unit's weight behind them and does
+# not belong in a review queue. A student missing a major assessment
+# drops to 0.65 and does. A floor that sends nearly-complete students to
+# review would fill the queue with non-events, and a queue full of
+# non-events is one nobody reads.
+MIN_EVIDENCE_COVERAGE = 0.70

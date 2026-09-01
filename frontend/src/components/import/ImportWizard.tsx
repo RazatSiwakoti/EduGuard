@@ -150,6 +150,23 @@ export default function ImportWizard({
    */
   const problems = useMemo(() => {
     const found: string[] = [];
+        const hasSingleCriterion = activeCriteria.some((criterion) =>
+      Boolean(singleMap[criterion.id]),
+    );
+
+    const hasWeeklyCriterion = activeCriteria.some((criterion) => {
+      const category = criterion.category;
+      const columnCount = category ? CATEGORY_COLUMN_COUNT[category] : null;
+
+      if (columnCount === null) return false;
+
+      const mapped = (weeklyMap[criterion.id] ?? []).filter(Boolean);
+      return mapped.length === columnCount;
+    });
+
+    if (!hasSingleCriterion && !hasWeeklyCriterion) {
+      found.push("At least one academic criterion must be mapped.");
+    }
 
     if (!identity.student_number_col) found.push("Student number column is not mapped.");
     if (!identity.name_col) found.push("Full name column is not mapped.");
@@ -168,7 +185,7 @@ export default function ImportWizard({
     }
 
     return found;
-  }, [identity, activeCriteria, weeklyMap]);
+  }, [identity, activeCriteria, singleMap, weeklyMap]);
 
   function buildMapping(): BulkIngestionMapping {
     // Only fully-mapped weekly criteria are sent. A partial set is

@@ -105,6 +105,19 @@ export default function ManualEntryForm({
     if (student.age.trim()) {
       const age = Number(student.age);
       if (!Number.isFinite(age) || age <= 0) found.push("Age must be a number.");
+
+      const hasSingleValue = active.some((criterion) => {
+      const raw = scores[criterion.id];
+      return raw !== undefined && raw.trim() !== "";
+      });
+
+      const hasWeeklyValue = active.some(
+        (criterion) => Boolean(includeWeekly[criterion.id]),
+      );
+
+      if (!hasSingleValue && !hasWeeklyValue) {
+        found.push("At least one academic criterion must contain data.");
+      }
     }
 
     for (const criterion of active) {
@@ -124,7 +137,7 @@ export default function ManualEntryForm({
     }
 
     return found;
-  }, [student, scores, active]);
+  }, [student, scores, active, includeWeekly]);
 
   function reset() {
     setStudent(EMPTY_STUDENT);

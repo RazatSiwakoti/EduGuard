@@ -306,6 +306,9 @@ def process_bulk_upload(
 
     for row_number, row in enumerate(rows, start=1):
         student_number = row.get(student_number_col)
+        if student_number is not None:
+           student_number = str(student_number).strip()
+
         name = row.get(name_col)
         email = row.get(email_col) if email_col else None
         program = row.get(program_col) if program_col else None

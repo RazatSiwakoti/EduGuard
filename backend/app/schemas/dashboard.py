@@ -31,6 +31,7 @@ class DashboardUnit(BaseModel):
 
     id: int
     unit_code: str
+    full_code: str
     unit_name: str
     year: Optional[int] = None
     teaching_period: Optional[str] = None

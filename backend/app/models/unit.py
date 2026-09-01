@@ -8,8 +8,15 @@ falls into.
 
 year + teaching_period identify WHICH offering this is. unit_code alone
 is no longer unique, since the same subject is taught every semester —
-uniqueness is now enforced on the (unit_code, year, teaching_period)
-combination instead.
+uniqueness is enforced on the (unit_code, year, teaching_period,
+class_code) combination instead.
+
+class_code is the fourth part because KOI runs the same subject more
+than once in a trimester: ICT730LA1 and ICT730LA2 are two classes with
+different lecturers, different students and different results. It is a
+NON-NULL column with "" meaning "no class split" — see
+app/services/class_code.py for why an empty string rather than NULL is
+load-bearing here.
 
 level ("bachelor"/"master") is informational only, not enforced at the
 database level - real enrolment can have messy edge cases (bridging
@@ -23,14 +30,21 @@ from sqlalchemy import (
 from sqlalchemy.sql import true
 from sqlalchemy.orm import relationship
 from app.models.base import Base
+from app.services import class_code as class_code_rules
 
 
 class Unit(Base):
     __tablename__ = "units"
     __table_args__ = (
+        # class_code is INSIDE the constraint and is never NULL. A
+        # nullable column in a UNIQUE constraint stops constraining the
+        # moment it is NULL, because SQL does not treat NULL as equal to
+        # itself - so two classless ICT730 rows in one trimester would
+        # both be accepted, which is the exact duplicate this constraint
+        # exists to refuse.
         UniqueConstraint(
-            "unit_code", "year", "teaching_period",
-            name="uq_unit_code_year_period",
+            "unit_code", "year", "teaching_period", "class_code",
+            name="uq_unit_code_year_period_class",
         ),
     )
 
@@ -40,6 +54,17 @@ class Unit(Base):
 
     year = Column(Integer, nullable=True)
     teaching_period = Column(String, nullable=True)
+
+    # "LA1" | "LA2" | "NCLA" | "" (no class split). NEVER NULL - see the
+    # note on __table_args__ and app/services/class_code.py.
+    #
+    # Stored as one composed string rather than a type column plus a
+    # number column, because the constraint above has to compare it and
+    # two nullable columns cannot be compared reliably. The form's two
+    # fields are composed on the way in and split on the way out.
+    class_code = Column(
+        String(8), nullable=False, default="", server_default="",
+    )
 
     # Informational only - see docstring above. Plain string, not an
     # Enum, since it's not enforced and keeping it simple avoids a
@@ -90,6 +115,30 @@ class Unit(Base):
     risk_scores = relationship("RiskScore", back_populates="unit")
     ingestion_batches = relationship("IngestionBatch", back_populates="unit")
     
+    @property
+    def class_type(self) -> str | None:
+        """"LA" | "NCLA" | None. Derived, never stored separately."""
+        return class_code_rules.split(self.class_code)[0]
+
+    @property
+    def class_number(self) -> int | None:
+        """The number on an LA class; None for NCLA and for no class."""
+        return class_code_rules.split(self.class_code)[1]
+
+    @property
+    def full_code(self) -> str:
+        """
+        The identity a human uses: "ICT730LA1", or "ICT730" if this unit
+        has no class split.
+
+        Everywhere two classes of one subject must be told apart -
+        the unit card, the dashboard filter, the report header, the PDF
+        filename, the typed unlock confirmation - prints THIS, not
+        `unit_code`. `unit_code` remains the SUBJECT, which is what makes
+        grouping several classes under one subject possible at all.
+        """
+        return class_code_rules.full_code(self.unit_code, self.class_code)
+
     @property
     def enrolled_count(self) -> int:
         """

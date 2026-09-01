@@ -119,4 +119,4 @@ check("tier came from the engines", v5.final_tier, "high_risk")
 print("\n" + ("ALL CHECKS PASSED" if not failures else f"{len(failures)} FAILURE(S)"))
 for f in failures:
     print("  !", f)
-sys.exit(1 if failures else 0)
+assert not failures, f"{len(failures)} FAILURE(S): {failures}"

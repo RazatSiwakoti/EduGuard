@@ -225,7 +225,11 @@ export function riskByUnit(
   for (const unit of units) {
     rows.set(unit.id, {
       unitId: unit.id,
-      unitCode: unit.unit_code,
+      // full_code, so the X axis tells ICT730LA1 and ICT730LA2 apart.
+      // Two adjacent bars both labelled "ICT730" is a chart that cannot
+      // be read, and a lecturer holding both classes is exactly who
+      // this chart is for.
+      unitCode: unit.full_code || unit.unit_code,
       unitName: unit.unit_name,
       total: 0,
       safe: 0,

@@ -1,4 +1,69 @@
+/* ------------------------------------------------------------------
+   Fonts
+   Three families, each with a real fallback stack so the interface is
+   readable before they arrive. `display=swap` on all three for the
+   same reason.
+   ------------------------------------------------------------------ */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
 @import "tailwindcss";
+
+/* ------------------------------------------------------------------
+   Design tokens, from the Figma design.
+   ADDED ALONGSIDE Tailwind's stone scale, never replacing it. The
+   existing interface is built on `stone` (a warm neutral) and the
+   design's #F6F5F1 page sits naturally beside it; swapping to `gray`
+   or `slate` would cool the whole thing and fight the design.
+   ------------------------------------------------------------------ */
+@theme {
+  --color-brand: #185fa5;
+  --color-brand-deep: #0b3d73;
+  --color-brand-bright: #2e8fd4;
+  --color-brand-wash: #ebf4ff;
+  --color-accent: #ef9f27;
+
+  --color-page: #f6f5f1;
+  --color-surface-alt: #fafaf7;
+  /* Card borders are deliberately near-invisible: the shadow does the
+     separating, and a visible 1px rule around every card turns a page
+     of content into a page of boxes. */
+  --color-hairline: rgba(17, 24, 39, 0.07);
+
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-serif: 'Instrument Serif', 'Times New Roman', serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+  --radius-card: 14px;
+
+  --shadow-card: 0 1px 2px rgba(17, 24, 39, 0.04), 0 1px 10px -6px rgba(17, 24, 39, 0.06);
+  --shadow-card-hover: 0 14px 40px -18px rgba(17, 24, 39, 0.22), 0 2px 6px rgba(17, 24, 39, 0.05);
+}
+
+/* Inter's stylistic sets: cv11 gives a single-storey a, ss01/ss03 tidy
+   the punctuation. Tabular numerals are set per-element with
+   `tabular-nums`, not globally - proportional figures read better in
+   prose. */
+body {
+  font-family: var(--font-sans);
+  font-feature-settings: 'cv11', 'ss01', 'ss03';
+}
+
+/* The page texture: two wide brand-tinted gradients and a fractal-noise
+   SVG. This is the single largest visual difference from a flat
+   background, and it costs one class and no JavaScript. Applied by
+   AppShell, not by `body`, so a page that wants a plain ground can
+   simply not use it. */
+.eduguard-page {
+  background-color: var(--color-page);
+  background-image:
+    radial-gradient(1200px 600px at 85% -10%, rgba(24, 95, 165, 0.08), transparent 60%),
+    radial-gradient(900px 500px at -10% 110%, rgba(239, 159, 39, 0.06), transparent 55%),
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.09  0 0 0 0 0.11  0 0 0 0 0.15  0 0 0 0.035 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  background-attachment: fixed;
+}
+
 @keyframes eduguard-fade-in {
   from { opacity: 0; }
   to   { opacity: 1; }

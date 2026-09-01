@@ -196,6 +196,9 @@ class ReportResponse(BaseModel):
 
     unit_id: int
     unit_code: str
+    class_code: str = ""
+    #: "ICT730LA1" - what the header and the filename print.
+    full_code: str = ""
     unit_name: str
     year: Optional[int] = None
     teaching_period: Optional[str] = None

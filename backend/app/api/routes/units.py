@@ -21,7 +21,7 @@ from app.schemas.unit import UnitCreate, UnitUpdate, UnitAssignLecturer, UnitOut
 from app.core.dependencies import require_role
 from app.core.teaching import TEACHING_ROLES
 from app.core.system_accounts import PLACEHOLDER_USER_EMAIL
-from app.services import unit_service
+from app.services import class_code as class_code_rules, unit_service
 
 router = APIRouter(
     prefix="/admin/units",
@@ -78,21 +78,40 @@ def _get_assignable_teacher_or_404(db: Session, user_id: int) -> User:
 # -------------------------
 @router.post("", response_model=UnitOut, status_code=status.HTTP_201_CREATED)
 def create_unit(payload: UnitCreate, db: Session = Depends(get_db)):
-    # Uniqueness is now on the (unit_code, year, teaching_period) combo,
-    # not unit_code alone - the same subject can be taught every semester.
+    # 400, not 422: the two fields are individually valid and their
+    # COMBINATION is what fails ("NCLA classes are not numbered"). A 422
+    # would send the client hunting for a malformed field.
+    try:
+        class_code = class_code_rules.compose(payload.class_type, payload.class_number)
+    except class_code_rules.ClassCodeError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+    # Uniqueness is on (unit_code, year, teaching_period, class_code) -
+    # the same subject is taught every semester AND more than once
+    # within one, so the class is part of the identity.
     existing = (
         db.query(Unit)
         .filter(
             Unit.unit_code == payload.unit_code,
             Unit.year == payload.year,
             Unit.teaching_period == payload.teaching_period,
+            Unit.class_code == class_code,
         )
         .first()
     )
     if existing:
+        # The message names the class, because "this unit already
+        # exists" in front of a coordinator who is deliberately creating
+        # a SECOND class of the same subject reads as a bug in the
+        # system rather than a duplicate they created.
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="This unit offering (code + year + teaching period) already exists",
+            detail=(
+                f"{class_code_rules.full_code(payload.unit_code, class_code)} already "
+                f"exists for {payload.teaching_period} {payload.year}."
+                + ("" if class_code else " Give this one a class code (LA1, LA2, NCLA) "
+                                          "to run it alongside the existing one.")
+            ),
         )
 
     new_unit = Unit(
@@ -102,6 +121,7 @@ def create_unit(payload: UnitCreate, db: Session = Depends(get_db)):
         year=payload.year,
         teaching_period=payload.teaching_period,
         level=payload.level,
+        class_code=class_code,
     )
 
     if payload.lecturer_id is not None:
@@ -145,6 +165,54 @@ def update_unit(unit_id: int, payload: UnitUpdate, db: Session = Depends(get_db)
     # exclude_unset: only fields actually sent in the request get applied -
     # a PATCH with just unit_name must never null out start_date.
     update_data = payload.model_dump(exclude_unset=True)
+
+    # The class is composed, not assigned. Pulled out of update_data
+    # first so the generic setattr loop below never writes `class_type`
+    # onto the model, where it is a read-only derived property.
+    sent_type = "class_type" in update_data
+    sent_number = "class_number" in update_data
+    class_type = update_data.pop("class_type", None)
+    class_number = update_data.pop("class_number", None)
+
+    if sent_type or sent_number:
+        # A number without its type is a half-sent form. Composing it
+        # would either drop the number silently or invent a type, and
+        # both leave the coordinator believing something that is not so.
+        if sent_number and not sent_type:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Send class_type together with class_number.",
+            )
+        try:
+            new_class_code = class_code_rules.compose(class_type, class_number)
+        except class_code_rules.ClassCodeError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+        if new_class_code != unit.class_code:
+            # Checked in the application as well as by the constraint,
+            # so the coordinator gets a sentence naming the clash rather
+            # than a 500 from an IntegrityError.
+            clash = (
+                db.query(Unit)
+                .filter(
+                    Unit.id != unit.id,
+                    Unit.unit_code == unit.unit_code,
+                    Unit.year == unit.year,
+                    Unit.teaching_period == unit.teaching_period,
+                    Unit.class_code == new_class_code,
+                )
+                .first()
+            )
+            if clash:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=(
+                        f"{class_code_rules.full_code(unit.unit_code, new_class_code)} "
+                        f"already exists for {unit.teaching_period} {unit.year}."
+                    ),
+                )
+            unit.class_code = new_class_code
+
     for field, value in update_data.items():
         setattr(unit, field, value)
 

@@ -13,6 +13,7 @@ import BucketBadge from "./BucketBadge";
 import ChartCard from "./ChartCard";
 import { BUCKET_STYLES, CHART_INK, MARK_GAP_PX, MARK_RADIUS_PX } from "./chartTheme";
 import { toNumber, toText, tooltipContentStyle } from "./tooltipFormat";
+import { useChartIntroAnimation } from "../../utils/chartAnimation";
 
 interface RiskByUnitChartProps {
   rows: UnitRiskRow[];
@@ -35,6 +36,14 @@ interface RiskByUnitChartProps {
  * chart degenerates into one bar showing what the donut already said.
  */
 export default function RiskByUnitChart({ rows, onSelectUnit }: RiskByUnitChartProps) {
+  // Grows in once on first paint, then stays instant for every
+  // filter change after it. See utils/chartAnimation.ts.
+  // The bars grow in once, on first paint only. See
+  // utils/chartAnimation.ts for why this is a CSS class rather
+  // than Recharts' own isAnimationActive, which does nothing at
+  // this version.
+  const intro = useChartIntroAnimation();
+
   const hasData = rows.some((row) => row.total > 0);
 
   // Index-based lookup, same reasoning as the donut: the chart hands
@@ -114,7 +123,7 @@ export default function RiskByUnitChart({ rows, onSelectUnit }: RiskByUnitChartP
               stroke={CHART_INK.surface}
               strokeWidth={MARK_GAP_PX}
               radius={MARK_RADIUS_PX}
-              isAnimationActive={false}
+              {...intro}
               onClick={handleBarClick}
               className="cursor-pointer"
             />

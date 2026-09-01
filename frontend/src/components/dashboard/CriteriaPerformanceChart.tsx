@@ -13,6 +13,7 @@ import type { CriteriaPerformanceRow } from "../../utils/dashboardAggregations";
 import ChartCard from "./ChartCard";
 import { CHART_INK, MARK_RADIUS_PX, SERIES_BLUE } from "./chartTheme";
 import { toNumber, toText, tooltipContentStyle } from "./tooltipFormat";
+import { useChartIntroAnimation } from "../../utils/chartAnimation";
 
 interface CriteriaPerformanceChartProps {
   rows: CriteriaPerformanceRow[];
@@ -45,6 +46,14 @@ interface CriteriaPerformanceChartProps {
 export default function CriteriaPerformanceChart({
   rows,
 }: CriteriaPerformanceChartProps) {
+  // Grows in once on first paint, then stays instant for every
+  // filter change after it. See utils/chartAnimation.ts.
+  // The bars grow in once, on first paint only. See
+  // utils/chartAnimation.ts for why this is a CSS class rather
+  // than Recharts' own isAnimationActive, which does nothing at
+  // this version.
+  const intro = useChartIntroAnimation();
+
   // Headroom above the tallest bar so its label never collides with the
   // top of the plot. Always at least 120 so the threshold line sits
   // comfortably inside the chart rather than pinned to the ceiling.
@@ -122,11 +131,11 @@ export default function CriteriaPerformanceChart({
               and keep the reader's eye on the marks. */}
           <Bar
             dataKey="percentOfThreshold"
-            name="Cohort average"
+                        name="Cohort average"
             fill={SERIES_BLUE}
             radius={[MARK_RADIUS_PX, MARK_RADIUS_PX, 0, 0]}
             maxBarSize={64}
-            isAnimationActive={false}
+            {...intro}
           >
             <LabelList
               dataKey="percentOfThreshold"

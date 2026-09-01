@@ -26,7 +26,7 @@ analysis has produced verdicts. Renames stay allowed in both lives.
   409  the unit's shape is locked        (T1 - unlock, or leave it)
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import require_role, require_teaching_role
@@ -45,7 +45,7 @@ from app.schemas.criteria import (
     UnlockResultOut,
 )
 from app.schemas.unit_shape import LecturerUnitShapeOut, ThresholdUpdateIn
-from app.services import criteria_service, unit_composition
+from app.services import audit_service, criteria_service, unit_composition
 
 router = APIRouter(prefix="/units/{unit_id}/criteria", tags=["Criteria"])
 
@@ -115,6 +115,7 @@ def get_unlock_preview(
 def unlock_criteria(
     unit_id: int,
     payload: UnlockRequest,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_role(UserRole.ADMIN)),
 ):
@@ -125,12 +126,28 @@ def unlock_criteria(
             db, unit, payload.unit_code, actor_id=current_user.id
         )
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        )
+
+    if result["unlocked"]:
+        audit_service.record(
+            db,
+            action=audit_service.CRITERIA_UNLOCKED,
+            actor=current_user,
+            unit=unit,
+            entity_type="unit",
+            entity_id=unit.id,
+            summary=(
+                f"Unit {unit.full_code} was unlocked for one shape edit."
+            ),
+            request=request,
+        )
 
     db.commit()
     return result
-
-
 # ---------------------------------------------------------------------
 # The lecturer's threshold bar (section T4)
 #
@@ -167,48 +184,61 @@ def get_unit_shape_for_lecturer(
 def update_unit_thresholds(
     unit_id: int,
     payload: ThresholdUpdateIn,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_teaching_role()),
 ):
     """
     Move the pass bar for one or both adjustable categories.
 
-    THE SHAPE LOCK IS DELIBERATELY NOT CONSULTED HERE. A unit is locked
-    exactly when marks have been imported or an analysis has run - which
-    is exactly when a lecturer looks at their at-risk list and decides
-    the bar is wrong. Gating the slider on the lock would make it
-    editable only on units where it changes nothing anyone can see. The
-    long note in `unit_composition` sets out why that is safe: a shape
-    change makes a stored score MEAN something else, a bar change only
-    moves the line drawn through scores that stay exactly where they
-    are.
-
-    It does mark analyses stale, through T1's existing timestamp, so the
-    report and the PDF both say "re-run the analysis" without a second
-    mechanism being invented for it.
-
-    Admin-excluded on purpose: an admin's own path to these numbers is
-    the setup screen, and widening this role check is section T5's
-    problem, with its tenant-isolation retest attached.
+    The threshold change and its audit event are committed together in
+    one transaction. A no-op threshold save creates no audit event.
     """
     unit = _get_unit_or_404(db, unit_id)
     _require_assigned_lecturer(unit, current_user)
 
+    # Capture the thresholds before making any changes.
+    before = audit_service.threshold_snapshot(
+        unit_composition.lecturer_threshold_view(db, unit)
+    )
+
     try:
         view = unit_composition.apply_threshold_changes(
-            db, unit, payload.model_dump(exclude_unset=True)
+            db,
+            unit,
+            payload.model_dump(exclude_unset=True),
         )
     except ValueError as exc:
-        # Covers ThresholdError AND the ValueError D1's
-        # `validate_lecturer_threshold` raises. Both are "that number is
-        # not allowed", both render 400, and the form prints either one
-        # under the slider that caused it.
+        # Covers ThresholdError and the ValueError raised by the
+        # threshold validation rules.
         db.rollback()
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        )
 
+    # Capture the thresholds after the change.
+    after = audit_service.threshold_snapshot(view)
+
+    # Only create an audit event if an actual threshold changed.
+    summary = audit_service.describe_threshold_change(before, after)
+
+    if summary:
+        audit_service.record(
+            db,
+            action=audit_service.THRESHOLD_CHANGED,
+            actor=current_user,
+            summary=f"{summary} ({unit.full_code})",
+            unit=unit,
+            before=before,
+            after=after,
+            request=request,
+        )
+
+    # Threshold change and audit row are committed together.
     db.commit()
-    return unit_composition.lecturer_threshold_view(db, unit)
 
+    return unit_composition.lecturer_threshold_view(db, unit)
 
 @router.post("", response_model=CriteriaOut, status_code=status.HTTP_201_CREATED)
 def create_criteria(

@@ -27,7 +27,7 @@ import SideNav from "./SideNav";
  */
 export default function AppShell() {
   return (
-    <div className="flex min-h-screen bg-stone-50">
+    <div className="eduguard-page flex min-h-screen">
       <SideNav />
 
       <div className="flex min-w-0 flex-1 flex-col">

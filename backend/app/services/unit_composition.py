@@ -401,11 +401,17 @@ def unlock_shape(db: Session, unit: Unit, confirmation: str,
     Unlocking an already-unlocked unit is idempotent, not an error: two
     admins clicking the same button should not produce a failure.
     """
+    # THE FULL CODE, not the bare subject. Once a subject can run as
+    # ICT730LA1 and ICT730LA2 in the same trimester, typing "ICT730"
+    # names two units - and this confirmation exists precisely to prove
+    # the admin knows WHICH unit they are unlocking. On a unit with no
+    # class split `full_code` IS `unit_code`, so nothing changes for the
+    # units that existed before classes did.
     typed = (confirmation or "").strip().casefold()
-    expected = (unit.unit_code or "").strip().casefold()
+    expected = (unit.full_code or "").strip().casefold()
     if not expected or typed != expected:
         raise ValueError(
-            f"Type the unit code exactly to confirm. Expected {unit.unit_code}."
+            f"Type the unit code exactly to confirm. Expected {unit.full_code}."
         )
 
     state = shape_lock_state(db, unit)

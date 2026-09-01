@@ -224,7 +224,8 @@ def _header(report: dict, style: dict) -> list:
 
     return [
         Paragraph(
-            f"{_escape(report['unit_code'])} &mdash; {_escape(report['unit_name'])}",
+            f"{_escape(report.get('full_code') or report['unit_code'])} "
+            f"&mdash; {_escape(report['unit_name'])}",
             style["title"],
         ),
         Paragraph("Early-warning report", style["subtitle"]),
@@ -650,7 +651,7 @@ def _intervention_section(report: dict, style: dict, width: float) -> list:
 def report_filename(report: dict) -> str:
     """A filename that stays meaningful in a downloads folder of thirty."""
     code = "".join(
-        char for char in str(report.get("unit_code") or "unit")
+        char for char in str(report.get("full_code") or report.get("unit_code") or "unit")
         if char.isalnum() or char in "-_"
     ) or "unit"
     stamp = report["generated_at"].strftime("%Y%m%d")
@@ -672,7 +673,7 @@ def build_report_pdf(report: dict) -> bytes:
         pagesize=A4,
         leftMargin=PAGE_MARGIN, rightMargin=PAGE_MARGIN,
         topMargin=14 * mm, bottomMargin=18 * mm,
-        title=f"{report['unit_code']} early-warning report",
+        title=f"{report.get('full_code') or report['unit_code']} early-warning report",
         author=report.get("lecturer_name") or "EduGuard",
         subject=f"Week {report['checkpoint_week']} checkpoint",
     )
@@ -705,7 +706,7 @@ def build_report_pdf(report: dict) -> bytes:
     ))
 
     footer = (
-        f"{report['unit_code']} · Week {report['checkpoint_week']} · "
+        f"{report.get('full_code') or report['unit_code']} · Week {report['checkpoint_week']} · "
         f"Generated {_fmt_dt(report['generated_at'])} · "
         f"EduGuard — confidential"
     )

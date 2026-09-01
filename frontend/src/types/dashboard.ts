@@ -24,7 +24,12 @@ export interface DashboardUnitCriterion {
 /** One unit the logged-in lecturer is assigned to. */
 export interface DashboardUnit {
   id: number;
+  /** The SUBJECT. Several classes share it, which is how the filter groups them. */
   unit_code: string;
+  /** "LA1" | "NCLA" | "" for no class split. */
+  class_code: string;
+  /** What the dropdown and the chart axis print. */
+  full_code: string;
   unit_name: string;
   year: number | null;
   teaching_period: string | null;
@@ -68,6 +73,8 @@ export interface DashboardStudent {
 
   unit_id: number;
   unit_code: string;
+  /** The class this row belongs to, ready to print. */
+  full_code: string;
 
   /** False = enrolled but the pipeline has never produced a verdict. */
   analysed: boolean;

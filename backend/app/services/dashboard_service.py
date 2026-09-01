@@ -84,6 +84,7 @@ def _unit_to_dict(unit: Unit, criteria: Optional[list[Criteria]] = None) -> dict
     return {
         "id": unit.id,
         "unit_code": unit.unit_code,
+        "full_code": unit.full_code,
         "unit_name": unit.unit_name,
         "year": unit.year,
         "teaching_period": unit.teaching_period,

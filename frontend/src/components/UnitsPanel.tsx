@@ -13,13 +13,61 @@ import {
 import { useLecturersList } from "../hooks/useLecturers";
 import CriteriaStatusCell from "./units/CriteriaStatusCell";
 import CriteriaSetupDialog from "./units/CriteriaSetupDialog";
-import type { Unit } from "../types/unit";
+import type { ClassType, Unit } from "../types/unit";
+import { CLASS_TYPES } from "../types/unit";
 import { useAuth } from "../context/AuthContext";
+
+interface EditDraft {
+  unit_name: string;
+  start_date: string;
+  level: string;
+  class_type: ClassType | "";
+  class_number: string;
+}
+
+const EMPTY_DRAFT: EditDraft = {
+  unit_name: "",
+  start_date: "",
+  level: "",
+  class_type: "",
+  class_number: "",
+};
+
+/** One class string for every inline input, so an edited row reads as
+ *  one control rather than five differently-styled boxes. */
+const INPUT_CLASS =
+  "rounded-md border border-brand bg-white px-2 py-1 text-sm text-stone-900 outline-none focus:ring-2 focus:ring-brand/30";
+
+/** Only LA is numbered — see types/unit.ts. */
+function isNumbered(type: ClassType | ""): boolean {
+  return CLASS_TYPES.some((option) => option.value === type && option.numbered);
+}
 
 export default function UnitsPanel() {
   const [showInactive, setShowInactive] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [editTarget, setEditTarget] = useState<Unit | null>(null);
+  // INLINE EDIT, not a modal.
+  //
+  // A dialog for three fields hides the row being changed behind an
+  // overlay, which is the one thing a coordinator wants to keep looking
+  // at while they change it - "was this the LA1 or the LA2?" is a
+  // question the modal covers up. Editing in place also makes it
+  // obvious which row is being edited when several are near-identical,
+  // which is exactly what two classes of one subject are.
+  //
+  // The whole draft is held rather than read from the DOM on submit:
+  // the class number input has to disappear when NCLA is picked, and a
+  // controlled value is the only way that stays correct.
+  // The create form's class fields are controlled, so the live preview
+  // below them can show the full code the coordinator is about to make.
+  // Reading it back from FormData would only be possible on submit,
+  // which is after the moment the preview is useful.
+  const [createUnitCode, setCreateUnitCode] = useState("");
+  const [createClassType, setCreateClassType] = useState<ClassType | "">("");
+  const [createClassNumber, setCreateClassNumber] = useState("");
+
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [draft, setDraft] = useState<EditDraft>(EMPTY_DRAFT);
   const [assignTarget, setAssignTarget] = useState<Unit | null>(null);
   const [archiveTargetId, setArchiveTargetId] = useState<number | null>(null);
   // The unit whose criteria are being configured (section T3). Held as
@@ -86,26 +134,63 @@ export default function UnitsPanel() {
         teaching_period: (form.get("teaching_period") as string) || null,
         level: (form.get("level") as string) || null,
         lecturer_id: lecturerRaw ? Number(lecturerRaw) : null,
+        class_type: createClassType === "" ? null : createClassType,
+        class_number:
+          createClassType !== "" && isNumbered(createClassType) && createClassNumber !== ""
+            ? Number(createClassNumber)
+            : null,
       },
-      { onSuccess: () => setIsCreateOpen(false) }
+      {
+        onSuccess: () => {
+          setIsCreateOpen(false);
+          setCreateUnitCode("");
+          setCreateClassType("");
+          setCreateClassNumber("");
+        },
+      }
     );
   }
 
-  function handleEditSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!editTarget) return;
-    const form = new FormData(event.currentTarget);
+  function startEdit(unit: Unit) {
+    setEditingId(unit.id);
+    setDraft({
+      unit_name: unit.unit_name,
+      start_date: unit.start_date ?? "",
+      level: unit.level ?? "",
+      class_type: unit.class_type ?? "",
+      class_number: unit.class_number === null ? "" : String(unit.class_number),
+    });
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setDraft(EMPTY_DRAFT);
+  }
+
+  function saveEdit() {
+    if (editingId === null) return;
+
+    // class_type and class_number always travel together. The server
+    // refuses a number without its type, and sending one alone would
+    // turn a UI slip into a 400 the coordinator has to decode.
+    const type = draft.class_type === "" ? null : draft.class_type;
+    const number =
+      type !== null && isNumbered(type) && draft.class_number !== ""
+        ? Number(draft.class_number)
+        : null;
 
     updateUnit.mutate(
       {
-        id: editTarget.id,
+        id: editingId,
         data: {
-          unit_name: form.get("unit_name") as string,
-          start_date: form.get("start_date") as string,
-          level: (form.get("level") as string) || null,
+          unit_name: draft.unit_name,
+          start_date: draft.start_date,
+          level: draft.level || null,
+          class_type: type,
+          class_number: number,
         },
       },
-      { onSuccess: () => setEditTarget(null) }
+      { onSuccess: cancelEdit }
     );
   }
 
@@ -184,16 +269,101 @@ export default function UnitsPanel() {
               </tr>
             </thead>
             <tbody>
-              {units.map((unit) => (
+              {units.map((unit) => {
+                const isEditing = editingId === unit.id;
+                return (
                 <tr
                   key={unit.id}
-                  className="border-b border-stone-100 last:border-0"
+                  className={`border-b border-stone-100 last:border-0 ${
+                    isEditing ? "bg-brand-wash/40" : ""
+                  }`}
                 >
-                  <td className="px-4 py-2.5 text-stone-900">
-                    {unit.unit_code}
+                  <td className="whitespace-nowrap px-4 py-2.5 text-stone-900">
+                    <span className="font-mono text-xs font-bold text-brand">
+                      {unit.unit_code}
+                    </span>
+                    {isEditing ? (
+                      <span className="mt-1 flex items-center gap-1">
+                        <select
+                          aria-label="Class type"
+                          value={draft.class_type}
+                          onChange={(event) =>
+                            setDraft((current) => ({
+                              ...current,
+                              class_type: event.target.value as ClassType | "",
+                              // Clearing the number when the type stops
+                              // being numbered is not tidiness: leaving
+                              // a stale 2 behind and sending it with
+                              // NCLA is a 400 the coordinator did not
+                              // cause and cannot see.
+                              class_number: isNumbered(event.target.value as ClassType | "")
+                                ? current.class_number
+                                : "",
+                            }))
+                          }
+                          className={`${INPUT_CLASS} w-24`}
+                        >
+                          <option value="">No class</option>
+                          {CLASS_TYPES.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.value}
+                            </option>
+                          ))}
+                        </select>
+                        {/* Rendered only for a numbered type. A disabled
+                            box beside NCLA invites a coordinator to try
+                            to type in it. */}
+                        {isNumbered(draft.class_type) && (
+                          <input
+                            aria-label="Class number"
+                            type="number"
+                            min={1}
+                            max={99}
+                            value={draft.class_number}
+                            onChange={(event) =>
+                              setDraft((current) => ({ ...current, class_number: event.target.value }))
+                            }
+                            className={`${INPUT_CLASS} w-14`}
+                          />
+                        )}
+                      </span>
+                    ) : (
+                      unit.class_code && (
+                        <span className="ml-1.5 rounded bg-brand-wash px-1.5 py-px font-mono text-[10px] font-bold text-brand">
+                          {unit.class_code}
+                        </span>
+                      )
+                    )}
                   </td>
                   <td className="px-4 py-2.5 text-stone-900">
-                    {unit.unit_name}
+                    {isEditing ? (
+                      <span className="flex flex-col gap-1">
+                        <input
+                          aria-label="Unit name"
+                          value={draft.unit_name}
+                          onChange={(event) =>
+                            setDraft((current) => ({ ...current, unit_name: event.target.value }))
+                          }
+                          className={INPUT_CLASS}
+                        />
+                        {/* Start date has no column of its own, and
+                            dropping it from the panel to get inline
+                            editing would have quietly removed a field
+                            that used to be editable. It rides under the
+                            name instead. */}
+                        <input
+                          aria-label="Start date"
+                          type="date"
+                          value={draft.start_date}
+                          onChange={(event) =>
+                            setDraft((current) => ({ ...current, start_date: event.target.value }))
+                          }
+                          className={`${INPUT_CLASS} text-xs`}
+                        />
+                      </span>
+                    ) : (
+                      unit.unit_name
+                    )}
                   </td>
                   <td className="px-4 py-2.5 text-stone-500">
                     {unit.teaching_period ?? "—"}
@@ -202,7 +372,18 @@ export default function UnitsPanel() {
                     {unit.year ?? "—"}
                   </td>
                   <td className="px-4 py-2.5 text-stone-500">
-                    {unit.level ?? "—"}
+                    {isEditing ? (
+                      <input
+                        aria-label="Level"
+                        value={draft.level}
+                        onChange={(event) =>
+                          setDraft((current) => ({ ...current, level: event.target.value }))
+                        }
+                        className={`${INPUT_CLASS} w-24`}
+                      />
+                    ) : (
+                      unit.level ?? "—"
+                    )}
                   </td>
                   <td className="px-4 py-2.5 text-stone-600">
                     {unit.lecturer ? unit.lecturer.full_name : "Unassigned"}
@@ -235,12 +416,30 @@ export default function UnitsPanel() {
                       >
                         Set up criteria
                       </button>
-                      <button
-                        onClick={() => setEditTarget(unit)}
-                        className="text-xs font-medium text-stone-600 hover:underline"
-                      >
-                        Edit
-                      </button>
+                      {isEditing ? (
+                        <>
+                          <button
+                            onClick={saveEdit}
+                            disabled={updateUnit.isPending}
+                            className="rounded-md bg-brand px-2 py-1 text-xs font-semibold text-white hover:bg-brand-deep disabled:opacity-50"
+                          >
+                            {updateUnit.isPending ? "Saving…" : "Save"}
+                          </button>
+                          <button
+                            onClick={cancelEdit}
+                            className="text-xs font-medium text-stone-600 hover:underline"
+                          >
+                            Cancel
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          onClick={() => startEdit(unit)}
+                          className="text-xs font-medium text-stone-600 hover:underline"
+                        >
+                          Edit
+                        </button>
+                      )}
                       {unit.lecturer ? (
                         <button
                           onClick={() => unassignLecturer.mutate(unit.id)}
@@ -274,7 +473,8 @@ export default function UnitsPanel() {
                     </div>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         )}
@@ -309,7 +509,9 @@ export default function UnitsPanel() {
                   <input
                     name="unit_code"
                     required
-                    className="w-full rounded border border-stone-300 px-3 py-2 text-sm outline-none focus:border-stone-500"
+                    value={createUnitCode}
+                    onChange={(event) => setCreateUnitCode(event.target.value.toUpperCase())}
+                    className="w-full rounded border border-stone-300 px-3 py-2 text-sm uppercase outline-none focus:border-stone-500"
                   />
                 </div>
                 <div>
@@ -323,6 +525,63 @@ export default function UnitsPanel() {
                   />
                 </div>
               </div>
+              {/* CLASS. Two locked options and a number, never free
+                  text: the vocabulary has to stay closed or every count
+                  grouped by class silently under-reports. Leaving both
+                  blank is valid and means "no class split", which is
+                  what every existing unit is. */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-stone-700">
+                    Class <span className="font-normal text-stone-400">(optional)</span>
+                  </label>
+                  <select
+                    name="class_type"
+                    value={createClassType}
+                    onChange={(event) => {
+                      const next = event.target.value as ClassType | "";
+                      setCreateClassType(next);
+                      if (!isNumbered(next)) setCreateClassNumber("");
+                    }}
+                    className="w-full rounded border border-stone-300 px-3 py-2 text-sm outline-none focus:border-stone-500"
+                  >
+                    <option value="">No class split</option>
+                    {CLASS_TYPES.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {isNumbered(createClassType) && (
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-stone-700">
+                      Class number
+                    </label>
+                    <input
+                      name="class_number"
+                      type="number"
+                      min={1}
+                      max={99}
+                      value={createClassNumber}
+                      onChange={(event) => setCreateClassNumber(event.target.value)}
+                      required
+                      className="w-full rounded border border-stone-300 px-3 py-2 text-sm outline-none focus:border-stone-500"
+                    />
+                  </div>
+                )}
+              </div>
+              {createClassType && (
+                <p className="-mt-1 font-mono text-xs text-stone-500">
+                  This unit will be{" "}
+                  <span className="font-bold text-brand">
+                    {createUnitCode || "CODE"}
+                    {createClassType}
+                    {isNumbered(createClassType) ? createClassNumber : ""}
+                  </span>
+                </p>
+              )}
+
               <div>
                 <label className="mb-1 block text-sm font-medium text-stone-700">
                   Unit name
@@ -401,75 +660,6 @@ export default function UnitsPanel() {
                 </button>
               </div>
             </form>
-          </Dialog.Content>
-        </Dialog.Portal>
-      </Dialog.Root>
-
-      {/* Edit Unit modal — only unit_name, start_date, level per backend contract */}
-      <Dialog.Root
-        open={editTarget !== null}
-        onOpenChange={(open) => !open && setEditTarget(null)}
-      >
-        <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 bg-black/30" />
-          <Dialog.Content className="fixed left-1/2 top-1/2 w-full max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-md bg-white p-6 shadow-lg">
-            <Dialog.Title className="text-base font-semibold text-stone-900">
-              Edit {editTarget?.unit_code}
-            </Dialog.Title>
-            {editTarget && (
-              <form onSubmit={handleEditSubmit} className="mt-4 space-y-3">
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-stone-700">
-                    Unit name
-                  </label>
-                  <input
-                    name="unit_name"
-                    defaultValue={editTarget.unit_name}
-                    required
-                    className="w-full rounded border border-stone-300 px-3 py-2 text-sm outline-none focus:border-stone-500"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-stone-700">
-                    Start date
-                  </label>
-                  <input
-                    name="start_date"
-                    type="date"
-                    defaultValue={editTarget.start_date}
-                    required
-                    className="w-full rounded border border-stone-300 px-3 py-2 text-sm outline-none focus:border-stone-500"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-stone-700">
-                    Level
-                  </label>
-                  <input
-                    name="level"
-                    defaultValue={editTarget.level ?? ""}
-                    className="w-full rounded border border-stone-300 px-3 py-2 text-sm outline-none focus:border-stone-500"
-                  />
-                </div>
-                <div className="flex justify-end gap-2 pt-2">
-                  <Dialog.Close asChild>
-                    <button
-                      type="button"
-                      className="rounded border border-stone-300 px-3 py-1.5 text-sm font-medium text-stone-700 hover:bg-stone-100"
-                    >
-                      Cancel
-                    </button>
-                  </Dialog.Close>
-                  <button
-                    type="submit"
-                    disabled={updateUnit.isPending}
-                    className="rounded bg-stone-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-stone-800 disabled:opacity-50"
-                  >
-                    {updateUnit.isPending ? "Saving…" : "Save"}
-                  </button>
-                </div>
-              </form>
-            )}
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>

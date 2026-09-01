@@ -39,6 +39,20 @@ export default function FilterBar({
   const selectedUnit = units.find((u) => u.id === filters.unitId) ?? null;
   const hasActiveFilter = filters.unitId !== null || filters.bucket !== null;
 
+  // Grouped by SUBJECT, which is what `unit_code` now means: several
+  // classes of ICT730 share it, and a flat list of "ICT730LA1,
+  // ICT730LA2, ICT730NCLA" makes a lecturer read three near-identical
+  // strings to find one. Insertion order is preserved, so the server's
+  // ordering still decides what comes first.
+  const subjects = Array.from(
+    units.reduce((groups, unit) => {
+      const list = groups.get(unit.unit_code);
+      if (list) list.push(unit);
+      else groups.set(unit.unit_code, [unit]);
+      return groups;
+    }, new Map<string, DashboardUnit[]>()),
+  );
+
   // Chips are ordered by severity, and only offered for buckets that
   // actually occur — a chip that can only ever return zero students is
   // noise, not a control.
@@ -59,7 +73,10 @@ export default function FilterBar({
             className="flex items-center gap-2 rounded-md border border-stone-200 px-3 py-1.5 text-sm text-stone-700 transition hover:bg-stone-50"
           >
             <span className="font-medium">
-              {selectedUnit ? selectedUnit.unit_code : "All units"}
+              {/* full_code, not unit_code. With ICT730LA1 and ICT730LA2
+                  both in the list, a trigger reading "ICT730" tells the
+                  lecturer nothing about which one is filtered. */}
+              {selectedUnit ? selectedUnit.full_code || selectedUnit.unit_code : "All units"}
             </span>
             <ChevronDown className="h-4 w-4 text-stone-400" aria-hidden="true" />
           </button>
@@ -81,24 +98,47 @@ export default function FilterBar({
 
             <DropdownMenu.Separator className="my-1 h-px bg-stone-200" />
 
-            {units.map((unit) => (
-              <DropdownMenu.Item
-                key={unit.id}
-                onSelect={() => onChange({ ...filters, unitId: unit.id })}
-                className="flex cursor-pointer items-start justify-between gap-3 rounded px-3 py-2 text-sm text-stone-700 outline-none hover:bg-stone-100"
-              >
-                <span className="min-w-0">
-                  <span className="block font-medium">{unit.unit_code}</span>
-                  <span className="block truncate text-xs text-stone-500">
-                    {unit.unit_name}
-                    {unit.teaching_period ? ` · ${unit.teaching_period}` : ""}
-                    {unit.year ? ` ${unit.year}` : ""}
-                  </span>
-                </span>
-                {filters.unitId === unit.id && (
-                  <Check className="mt-0.5 h-4 w-4 shrink-0 text-stone-900" />
+            {subjects.map(([subjectCode, classes]) => (
+              <div key={subjectCode}>
+                {/* A subject heading appears ONLY when the lecturer
+                    actually holds more than one class of it. Printing
+                    "ICT730" above a single ICT730LA1 would add a line
+                    of chrome that groups nothing. */}
+                {classes.length > 1 && (
+                  <p className="px-3 pb-1 pt-2 font-mono text-[10px] font-semibold uppercase tracking-wider text-stone-400">
+                    {subjectCode} · {classes.length} classes
+                  </p>
                 )}
-              </DropdownMenu.Item>
+
+                {classes.map((unit) => (
+                  <DropdownMenu.Item
+                    key={unit.id}
+                    onSelect={() => onChange({ ...filters, unitId: unit.id })}
+                    className={`flex cursor-pointer items-start justify-between gap-3 rounded px-3 py-2 text-sm text-stone-700 outline-none hover:bg-stone-100 ${
+                      classes.length > 1 ? "pl-5" : ""
+                    }`}
+                  >
+                    <span className="min-w-0">
+                      <span className="flex items-baseline gap-1.5">
+                        <span className="font-medium">{unit.unit_code}</span>
+                        {unit.class_code && (
+                          <span className="rounded bg-brand-wash px-1.5 py-px font-mono text-[10px] font-bold text-brand">
+                            {unit.class_code}
+                          </span>
+                        )}
+                      </span>
+                      <span className="block truncate text-xs text-stone-500">
+                        {unit.unit_name}
+                        {unit.teaching_period ? ` · ${unit.teaching_period}` : ""}
+                        {unit.year ? ` ${unit.year}` : ""}
+                      </span>
+                    </span>
+                    {filters.unitId === unit.id && (
+                      <Check className="mt-0.5 h-4 w-4 shrink-0 text-stone-900" />
+                    )}
+                  </DropdownMenu.Item>
+                ))}
+              </div>
             ))}
           </DropdownMenu.Content>
         </DropdownMenu.Portal>

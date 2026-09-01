@@ -140,7 +140,7 @@ def record(
             actor_name=(actor.full_name if actor else None),
             actor_role=(actor.role.value if actor and hasattr(actor.role, "value") else (str(actor.role) if actor else None)),
             unit_id=unit.id if unit else None,
-            unit_code=unit.unit_code if unit else None,
+            unit_code=unit.full_code if unit else None,
             student_id=student.id if student else None,
             student_name=student.name if student else None,
             entity_type=entity_type,

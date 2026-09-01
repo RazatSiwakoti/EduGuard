@@ -54,6 +54,7 @@ def resolve_or_create_student(
     caller to report. If not found, a new Student is created - name is
     required in this case since Student.name is NOT NULL at the DB level.
     """
+    student_number = str(student_number).strip()
     student = db.query(Student).filter(Student.student_number == student_number).first()
 
     if student:

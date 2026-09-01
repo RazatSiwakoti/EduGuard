@@ -824,6 +824,12 @@ def build_unit_report(
     return {
         "unit_id": unit.id,
         "unit_code": unit.unit_code,
+        "class_code": unit.class_code,
+        # The header, the footer and the PDF filename all use this. Two
+        # classes of one subject would otherwise produce two documents
+        # with the same title and the same filename, which is how the
+        # wrong cohort's report gets forwarded to a coordinator.
+        "full_code": unit.full_code,
         "unit_name": unit.unit_name,
         "year": unit.year,
         "teaching_period": unit.teaching_period,

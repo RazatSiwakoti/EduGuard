@@ -99,7 +99,7 @@ export default function Login() {
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Instrument+Serif:ital@0;1&family=Playfair+Display:ital,wght@0,400;0,600;1,400;1,600&display=swap');
 
         @keyframes spin { to { transform: rotate(360deg); } }
-        @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes fadeInUp { from { opacity: 0; } to { opacity: 1;  } }
         @keyframes fadeInRight { from { opacity: 0; transform: translateX(-20px); } to { opacity: 1; transform: translateX(0); } }
         @keyframes fadeInLeft { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
         @keyframes float1 { 0%,100% { transform: translateY(0px) rotate(0deg); } 33% { transform: translateY(-10px) rotate(0.5deg); } 66% { transform: translateY(-5px) rotate(-0.5deg); } }
@@ -383,18 +383,31 @@ export default function Login() {
             {!isLoading && (
               <div style={{ padding: "28px 32px 0" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 20 }}>
-                  <div style={{ width: 68, height: 68, flexShrink: 0 }}>
+                 
+                  <div style={{ 
+                     width: 60,
+                     height: 68,
+                     flexShrink: 0,                      
+                     display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      overflow: "visible",
+
+                     }}>
                     <img
                       src={facultyLogo}
                       alt="Faculty portal logo"
                       style={{
-                        width: "200%",
+                        width: "100%",
                         height: "100%",
                         objectFit: "contain",
                         display: "block",
                         borderRadius: 18,
+                        transform: "scale(5.5) translateY(3px)",
+                        
                       }}
                     />
+
                   </div>
                   <div>
                     <div
@@ -414,7 +427,7 @@ export default function Login() {
                       style={{
                         fontFamily: "'Playfair Display', Georgia, serif",
                         color: "#0F172A",
-                        fontSize: 22,
+                        fontSize: 28,
                         fontWeight: 600,
                         margin: 0,
                         lineHeight: 1.2,
@@ -424,7 +437,7 @@ export default function Login() {
                       <span
                         style={{
                           fontWeight: 600,
-                          background: "linear-gradient(90deg, #185FA5 0%, #1a8c3c 100%)",
+                          background: "linear-gradient(90deg, #155392 0%, #1e9943 100%)",
                           WebkitBackgroundClip: "text",
                           WebkitTextFillColor: "transparent",
                           backgroundClip: "text",
@@ -443,7 +456,7 @@ export default function Login() {
                     color: "#8A96A4",
                     fontSize: 14,
                     fontWeight: 400,
-                    margin: "0 0 22px",
+                    margin: "-10px 0 15px",
                     lineHeight: 1.65,
                     letterSpacing: "0.01em",
                   }}
@@ -451,14 +464,7 @@ export default function Login() {
                   Use your KOI lecturer credentials to access the risk dashboard.
                 </p>
 
-                <div
-                  style={{
-                    height: 1,
-                    background:
-                      "linear-gradient(90deg, transparent, #E5E7EB 20%, #E5E7EB 80%, transparent)",
-                    marginBottom: 22,
-                  }}
-                />
+                
 
                 <form onSubmit={handleLogin} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                   <div>
@@ -782,7 +788,7 @@ export default function Login() {
               boxShadow: "0 32px 80px rgba(0,0,0,0.25)",
               zIndex: 201,
               overflow: "hidden",
-              animation: "fadeInUp 0.2s ease",
+              animation: "fadeInUp 0.5s ease",
             }}
           >
             <div

@@ -3,6 +3,7 @@ import type {
   StudentDetailResponse,
   StudentNoteDetail,
   StudentReviewSubmit,
+  StudentEditPayload,
 } from "../types/studentDetail";
 
 /**
@@ -69,5 +70,16 @@ export const studentDetailService = {
       { params: { unit_id: unitId, checkpoint_week: checkpointWeek } },
     );
     return res.data;
+  },
+
+  updateStudent: async (studentId: number, unitId: number, payload: StudentEditPayload) => {
+    const res = await api.patch(`/lecturer/students/${studentId}`, payload, {
+      params: { unit_id: unitId },
+    });
+    return res.data;
+  },
+
+  deleteStudent: async (studentId: number, unitId: number) => {
+    await api.delete(`/lecturer/students/${studentId}`, { params: { unit_id: unitId } });
   },
 };

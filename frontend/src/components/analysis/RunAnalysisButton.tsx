@@ -299,6 +299,7 @@ export default function RunAnalysisButton({
                   />
                   <Stat value={result.newly_analysed} label="newly scored" />
                   <Stat value={result.unchanged} label="unchanged" />
+                  <Stat value={result.missing_data} label="missing data" tone="bad" icon={CircleAlert} />
                 </div>
 
                 {(result.now_needs_review > 0 ||

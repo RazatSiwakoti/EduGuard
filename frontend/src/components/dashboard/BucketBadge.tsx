@@ -30,13 +30,17 @@ const BUCKET_ICONS: Record<RiskBucket, LucideIcon> = {
 
 interface BucketBadgeProps {
   bucket: RiskBucket;
+  isMissingData?: boolean;
   /** Hides the text label. Only safe where a nearby label already exists. */
   iconOnly?: boolean;
 }
 
-export default function BucketBadge({ bucket, iconOnly = false }: BucketBadgeProps) {
+export default function BucketBadge({ bucket, isMissingData = false, iconOnly = false }: BucketBadgeProps) {
   const Icon = BUCKET_ICONS[bucket];
-  const style = BUCKET_STYLES[bucket];
+  const style = isMissingData && bucket === "needs_review"
+    ? BUCKET_STYLES.needs_review
+    : BUCKET_STYLES[bucket];
+  const label = isMissingData && bucket === "needs_review" ? "Missing data" : BUCKET_LABELS[bucket];
 
   return (
     <span
@@ -46,9 +50,9 @@ export default function BucketBadge({ bucket, iconOnly = false }: BucketBadgePro
       <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
       {iconOnly ? (
         // Kept in the accessibility tree even when visually hidden.
-        <span className="sr-only">{BUCKET_LABELS[bucket]}</span>
+        <span className="sr-only">{label}</span>
       ) : (
-        BUCKET_LABELS[bucket]
+        label
       )}
     </span>
   );

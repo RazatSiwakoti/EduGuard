@@ -29,6 +29,7 @@ export interface UnitAnalysisResult {
   total_students: number;
   succeeded: number;
   failed: number;
+  missing_data: number;
   /** Set when nothing ran, with the reason in plain words. */
   skipped_reason: string | null;
 
@@ -59,6 +60,7 @@ export interface AnalysisRunResult {
   total_students: number;
   succeeded: number;
   failed: number;
+  missing_data: number;
 
   newly_analysed: number;
   moved_toward_risk: number;

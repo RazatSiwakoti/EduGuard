@@ -11,6 +11,7 @@ import { BUCKET_STYLES } from "../dashboard/chartTheme";
 import AssessmentCell from "./AssessmentCell";
 import MetricCell from "./MetricCell";
 import TrendCell from "./TrendCell";
+import RowReviewMenu from "./RowReviewMenu";
 
 interface StudentRowProps {
   student: DashboardStudent;
@@ -124,12 +125,12 @@ export default function StudentRow({
           row's cells would shift one column left of their headings. */}
       {showTutorial && (
         <td className="px-4 py-3">
-          <MetricCell value={tutorial} label="Weekly tutorials" hint="W2–W7 completion" />
+          <MetricCell value={tutorial} label="Weekly tutorials" hint="W2–W7 completion" display="count" />
         </td>
       )}
 
       <td className="px-4 py-3">
-        <BucketBadge bucket={bucket} />
+        <BucketBadge bucket={bucket} isMissingData={student.is_missing_data} />
       </td>
 
       <td className="px-4 py-3">
@@ -137,6 +138,9 @@ export default function StudentRow({
           attendanceTrend={attendance?.trendValue ?? null}
           tutorialTrend={tutorial?.trendValue ?? null}
         />
+      </td>
+      <td className="px-4 py-3 text-right">
+        <RowReviewMenu student={student} unitCode={student.unit_code} criteria={unit?.criteria} />
       </td>
     </tr>
   );

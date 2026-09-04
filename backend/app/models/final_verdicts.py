@@ -33,6 +33,7 @@ class FinalVerdict(Base):
     # NULL when requires_review=True - no automatic verdict was reached.
     final_tier = Column(String, nullable=True)
     requires_review = Column(Boolean, nullable=False, default=False)
+    is_missing_data = Column(Boolean, nullable=False, server_default="false")
 
     # Plain-language explanation for the lecturer - populated from the
     # rule engine's per-criterion breakdown for now; SHAP output gets

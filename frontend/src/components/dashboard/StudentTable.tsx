@@ -7,6 +7,7 @@ import {
   getBucket,
 } from "../../utils/dashboardAggregations";
 import BucketBadge from "./BucketBadge";
+import RowReviewMenu from "../students/RowReviewMenu";
 
 interface StudentTableProps {
   students: DashboardStudent[];
@@ -136,7 +137,15 @@ export default function StudentTable({ students }: StudentTableProps) {
   if (students.length === 0) {
     return (
       <div className="rounded-lg border border-stone-200 bg-white p-10 text-center">
-        <p className="text-sm text-stone-500">No students match the current filters.</p>
+        <table className="w-full">
+          <tbody>
+            <tr>
+              <td colSpan={6}>
+                <p className="text-sm text-stone-500">No students match the current filters.</p>
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     );
   }
@@ -182,6 +191,9 @@ export default function StudentTable({ students }: StudentTableProps) {
               <th scope="col" className="px-4 py-3 font-medium">
                 ML model
               </th>
+              <th scope="col" className="px-4 py-3 text-right">
+                <span className="sr-only">Actions</span>
+              </th>
             </tr>
           </thead>
 
@@ -225,7 +237,7 @@ export default function StudentTable({ students }: StudentTableProps) {
                   <td className="px-4 py-3 text-stone-600">{student.unit_code}</td>
 
                   <td className="px-4 py-3">
-                    <BucketBadge bucket={bucket} />
+                    <BucketBadge bucket={bucket} isMissingData={student.is_missing_data} />
                   </td>
 
                   <td className="px-4 py-3 text-xs text-stone-600">
@@ -234,6 +246,19 @@ export default function StudentTable({ students }: StudentTableProps) {
 
                   <td className="px-4 py-3 text-xs text-stone-600">
                     {student.ml_tier ? BUCKET_LABELS[student.ml_tier] : "—"}
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <RowReviewMenu
+                      student={student}
+                      unitCode={student.unit_code}
+                      criteria={student.criteria.map((criterion) => ({
+                        id: criterion.criteria_id,
+                        name: criterion.name,
+                        category: criterion.category,
+                        threshold: criterion.threshold,
+                        max_score: criterion.max_score,
+                      }))}
+                    />
                   </td>
                 </tr>
               );

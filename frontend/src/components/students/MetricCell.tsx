@@ -1,5 +1,5 @@
 import { TriangleAlert } from "lucide-react";
-import type { MetricValue } from "../../utils/studentsTable";
+import { completedWeeks, type MetricValue } from "../../utils/studentsTable";
 
 interface MetricCellProps {
   value: MetricValue | null;
@@ -7,6 +7,7 @@ interface MetricCellProps {
   label: string;
   /** Extra tooltip line, e.g. the tutorial column's "W2–W7 completion". */
   hint?: string;
+  display?: "percent" | "count";
 }
 
 /**
@@ -53,7 +54,7 @@ const STANDING_STYLES: Record<Standing, { text: string; bar: string }> = {
  * uploaded has not attended zero classes — we simply do not know, and
  * showing 0% would invent a fact and mark them red for it.
  */
-export default function MetricCell({ value, label, hint }: MetricCellProps) {
+export default function MetricCell({ value, label, hint, display = "percent" }: MetricCellProps) {
   if (value === null) {
     return (
       <span className="text-stone-400" title={`No ${label.toLowerCase()} data recorded`}>
@@ -65,13 +66,14 @@ export default function MetricCell({ value, label, hint }: MetricCellProps) {
   const standing = standingOf(value.score, value.threshold);
   const style = STANDING_STYLES[standing];
   const rounded = Math.round(value.score);
+  const count = display === "count" ? completedWeeks(value.weeklyValues) : null;
 
   // Percentages can exceed 100 through a data-entry error; clamping the
   // bar keeps it inside its track rather than overflowing the cell.
   const barWidth = Math.max(0, Math.min(100, value.score));
 
   const tooltip = [
-    `${label}: ${rounded}%`,
+    count ? `${label}: ${count.done}/${count.total} submitted (${rounded}%)` : `${label}: ${rounded}%`,
     `Threshold for this unit: ${Math.round(value.threshold)}%`,
     hint,
     value.ambiguous
@@ -85,7 +87,7 @@ export default function MetricCell({ value, label, hint }: MetricCellProps) {
     <div className="w-24" title={tooltip}>
       <div className="flex items-center gap-1">
         <span className={`text-sm font-medium tabular-nums ${style.text}`}>
-          {rounded}%
+          {count ? `${count.done}/${count.total}` : `${rounded}%`}
         </span>
 
         {/* Icon, not colour alone. The amber and red bands sit close

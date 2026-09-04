@@ -41,6 +41,7 @@ class UnitAnalysisResult(BaseModel):
     total_students: int = 0
     succeeded: int = 0
     failed: int = 0
+    missing_data: int = 0
     #: Set when nothing ran, with the reason in plain words. A unit with
     #: no enrolments is not an error - it is a unit nobody has uploaded a
     #: cohort for yet, and saying so beats a 400 that reads like a crash.
@@ -73,6 +74,7 @@ class AnalysisRunResult(BaseModel):
     total_students: int = 0
     succeeded: int = 0
     failed: int = 0
+    missing_data: int = 0
 
     newly_analysed: int = 0
     moved_toward_risk: int = 0

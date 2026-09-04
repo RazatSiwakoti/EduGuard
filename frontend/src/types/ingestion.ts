@@ -57,6 +57,12 @@ export interface IngestionRowWarning {
   message: string;
 }
 
+export interface IncompleteStudent {
+  student_number: string;
+  name: string;
+  missing: string[];
+}
+
 /** One student's outcome from the analysis that runs after import. */
 export interface StudentAnalysisResult {
   student_id: number;
@@ -90,6 +96,8 @@ export interface BulkIngestionResult {
   values_failed: number;
   errors: IngestionRowError[];
   warnings: IngestionRowWarning[];
+  incomplete_students: IncompleteStudent[];
+  incomplete_count: number;
   /** Null only when no student had a single value stored. */
   analysis_summary: AnalysisSummary | null;
 }

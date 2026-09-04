@@ -37,7 +37,7 @@ interface AssessmentCellProps {
  * a third assessment entirely — precisely backwards.
  */
 export default function AssessmentCell({ progress, hasAnyData }: AssessmentCellProps) {
-  const { marked, total, averagePercent, items, totalUnknown } = progress;
+  const { marked, total, averagePercent, items, totalUnknown, unitTotalUnavailable } = progress;
 
   if (total === 0) {
     return (
@@ -56,6 +56,7 @@ export default function AssessmentCell({ progress, hasAnyData }: AssessmentCellP
     totalUnknown
       ? `${marked} assessment${marked === 1 ? "" : "s"} marked (unit total unavailable)`
       : `${marked} of ${total} assessments marked`,
+    unitTotalUnavailable ? "Unit total unavailable; showing recorded marks." : undefined,
     averagePercent !== null ? `Average of marked: ${averagePercent}%` : undefined,
     "",
     ...items.map((item) =>
@@ -76,7 +77,7 @@ export default function AssessmentCell({ progress, hasAnyData }: AssessmentCellP
           }`}
         >
           {marked}
-          {!totalUnknown && <span className="text-stone-400">/{total}</span>}
+          <span className="text-stone-400">/{total}</span>
         </span>
       </div>
 

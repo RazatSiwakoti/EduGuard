@@ -293,7 +293,8 @@ def process_bulk_upload(
     weekly_criteria_column_map: Optional[dict[int, list[str]]] = None,
     gender_col: Optional[str] = None,
     age_col: Optional[str] = None,
-) -> tuple[IngestionBatch, list[dict], list[dict], set[int]]:
+    include_incomplete_students: bool = False,
+) -> tuple:
     """
     rows: one dict per CSV/Excel row, keyed by the file's original column
     headers.
@@ -317,6 +318,7 @@ def process_bulk_upload(
 
     errors: list[dict] = []
     warnings: list[dict] = []
+    incomplete_students: list[dict] = []
     success_count = 0
     touched_student_ids: set[int] = set()
 
@@ -396,6 +398,11 @@ def process_bulk_upload(
             touched_student_ids.add(student.id)
 
         if blank_criteria:
+            incomplete_students.append({
+                "student_number": student_number,
+                "name": student.name or student_number,
+                "missing": blank_criteria,
+            })
             # The student is named, not just the row number. A lecturer
             # chasing a missing mark searches Moodle by name; a warning
             # reading "row 43" makes them reopen the spreadsheet first.
@@ -442,6 +449,8 @@ def process_bulk_upload(
     batch.values_stored = success_count
     batch.values_failed = len(errors)
 
+    if include_incomplete_students:
+        return batch, errors, warnings, incomplete_students, touched_student_ids
     return batch, errors, warnings, touched_student_ids
 
 
@@ -550,5 +559,3 @@ def process_manual_entry(
         not student_existed,
         not enrollment_existed,
     )
-
-

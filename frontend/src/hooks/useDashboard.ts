@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { dashboardService } from "../services/dashboardService";
 
 const KEY = ["lecturer-dashboard"];
@@ -22,4 +22,9 @@ export function useLecturerDashboard(checkpointWeek = 8) {
     staleTime: 60_000,
     refetchOnWindowFocus: false,
   });
+}
+
+export function useRefreshDashboard() {
+  const queryClient = useQueryClient();
+  return () => queryClient.invalidateQueries({ queryKey: KEY, refetchType: "all" });
 }

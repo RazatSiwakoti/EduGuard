@@ -55,6 +55,8 @@ export interface DashboardCriterionScore {
   max_score: number;
   /** Early-vs-late momentum. Only ever set for attendance / weekly_tut. */
   trend_value: number | null;
+  /** Per-week cells; only populated for attendance and weekly_tut. */
+  weekly_values: (string | boolean | null)[] | null;
 }
 
 /**
@@ -81,6 +83,7 @@ export interface DashboardStudent {
 
   final_tier: RiskTier | null;
   requires_review: boolean;
+  is_missing_data: boolean;
   reason: string | null;
   checkpoint_week: number | null;
   computed_at: string | null;

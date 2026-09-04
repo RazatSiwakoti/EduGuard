@@ -189,7 +189,7 @@ async def bulk_ingest(
     rows = [_sanitize_row(r) for r in raw_rows]
 
     try:
-        batch, errors, warnings, touched_student_ids = ingestion_service.process_bulk_upload(
+        batch, errors, warnings, incomplete_students, touched_student_ids = ingestion_service.process_bulk_upload(
             db=db,
             unit_id=unit_id,
             lecturer_id=current_user.id,
@@ -210,6 +210,7 @@ async def bulk_ingest(
             age_col=mapping_data.age_col,
             criteria_column_map=mapping_data.criteria_column_map,
             weekly_criteria_column_map=mapping_data.weekly_criteria_column_map,
+            include_incomplete_students=True,
         )
 
         analysis_summary = None
@@ -239,6 +240,8 @@ async def bulk_ingest(
         values_failed=batch.values_failed,
         errors=[IngestionRowError(**e) for e in errors],
         warnings=[IngestionRowWarning(**w) for w in warnings],
+        incomplete_students=incomplete_students,
+        incomplete_count=len(incomplete_students),
         analysis_summary=analysis_summary,
     )
 

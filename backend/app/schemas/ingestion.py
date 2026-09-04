@@ -65,6 +65,12 @@ class IngestionRowWarning(BaseModel):
     message: str
 
 
+class IncompleteStudent(BaseModel):
+    student_number: str
+    name: str
+    missing: list[str]
+
+
 class StudentAnalysisResult(BaseModel):
     student_id: int
     rule_level: str
@@ -90,6 +96,8 @@ class BulkIngestionResult(BaseModel):
     filename: str
     errors: list[IngestionRowError]
     warnings: list[IngestionRowWarning]
+    incomplete_students: list[IncompleteStudent] = []
+    incomplete_count: int = 0
     analysis_summary: Optional[AnalysisSummary] = None
 
 

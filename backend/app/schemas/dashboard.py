@@ -22,7 +22,7 @@ until a lecturer resolves it. The frontend renders that as its own
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class DashboardUnit(BaseModel):
@@ -62,6 +62,10 @@ class DashboardCriterionScore(BaseModel):
     threshold: float
     max_score: float
     trend_value: Optional[float] = None
+    weekly_values: Optional[list] = Field(
+        default=None,
+        description="Only populated for attendance and weekly_tut.",
+    )
 
 
 class DashboardStudent(BaseModel):
@@ -93,6 +97,7 @@ class DashboardStudent(BaseModel):
 
     final_tier: Optional[str] = None        # "safe" | "low_risk" | "high_risk" | None
     requires_review: bool = False
+    is_missing_data: bool = False
     reason: Optional[str] = None
     checkpoint_week: Optional[int] = None
     computed_at: Optional[datetime] = None

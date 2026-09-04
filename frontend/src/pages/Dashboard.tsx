@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { CircleAlert, LayoutDashboard, RefreshCw } from "lucide-react";
-import { useLecturerDashboard } from "../hooks/useDashboard";
+import { useLecturerDashboard, useRefreshDashboard } from "../hooks/useDashboard";
 import type { DashboardFilters, RiskBucket } from "../types/dashboard";
 import {
   computeKpis,
@@ -43,7 +43,9 @@ import RunAnalysisButton from "../components/analysis/RunAnalysisButton";
  * Initial state is "All units, all risk levels", as specified.
  */
 export default function Dashboard() {
-  const { data, isLoading, isError, error, refetch, isFetching } = useLecturerDashboard();
+  const { data, isLoading, isError, error, isFetching } = useLecturerDashboard();
+  const refreshDashboard = useRefreshDashboard();
+  const [updatedAt, setUpdatedAt] = useState<string | null>(null);
 
   const [filters, setFilters] = useState<DashboardFilters>({
     unitId: null,
@@ -115,7 +117,7 @@ export default function Dashboard() {
             ? error.message
             : "Something went wrong reaching the server."
         }
-        onRetry={() => void refetch()}
+        onRetry={() => void refreshDashboard()}
       />
     );
   }
@@ -158,7 +160,7 @@ export default function Dashboard() {
 
           <button
             type="button"
-            onClick={() => void refetch()}
+            onClick={() => void refreshDashboard().finally(() => setUpdatedAt(new Date().toLocaleTimeString()))}
             disabled={isFetching}
             className="inline-flex items-center gap-2 rounded-md border border-stone-200 bg-white px-3 py-1.5 text-sm font-medium text-stone-700 transition hover:bg-stone-50 disabled:opacity-50"
           >
@@ -168,6 +170,7 @@ export default function Dashboard() {
             />
             Refresh
           </button>
+          {updatedAt && <span className="text-xs text-stone-500" aria-live="polite">Updated {updatedAt}</span>}
           </div>
         </header>
 

@@ -146,17 +146,25 @@ export default function StudentsTable({
 
       {filteredCount === 0 ? (
         <div className="px-6 py-14 text-center">
-          <p className="text-sm text-stone-500">{emptyMessage}</p>
+          <table className="w-full">
+            <tbody>
+              <tr>
+                <td colSpan={showTutorial ? 7 : 6}>
+                  <p className="text-sm text-stone-500">{emptyMessage}</p>
 
-          {onClearFilters && (
-            <button
-              type="button"
-              onClick={onClearFilters}
-              className="mt-3 text-sm font-medium text-stone-700 underline underline-offset-4 transition hover:text-stone-900"
-            >
-              Clear all filters
-            </button>
-          )}
+                  {onClearFilters && (
+                    <button
+                      type="button"
+                      onClick={onClearFilters}
+                      className="mt-3 text-sm font-medium text-stone-700 underline underline-offset-4 transition hover:text-stone-900"
+                    >
+                      Clear all filters
+                    </button>
+                  )}
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       ) : (
         <>
@@ -183,6 +191,9 @@ export default function StudentsTable({
                       direction={direction}
                       onSort={onSort}
                     />
+                  </th>
+                  <th scope="col" className="px-4 py-3 text-right">
+                    <span className="sr-only">Actions</span>
                   </th>
                   <th scope="col" className="px-4 py-3">
                     <SortHeader

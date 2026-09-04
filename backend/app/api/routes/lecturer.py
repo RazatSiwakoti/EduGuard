@@ -13,12 +13,20 @@ the dashboard can never accidentally trigger a recompute just by being
 opened or refreshed.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import require_teaching_role
 from app.database import get_db
 from app.models.student import Student
+from app.models.enrollment import Enrollment
+from app.models.assessment_event import AssessmentEvent
+from app.models.criteria import Criteria
+from app.models.enums import EventSource
+from app.models.final_verdicts import FinalVerdict
+from app.models.verdict_review import VerdictReview
+from app.models.risk_score import RiskScore
+from app.models.student_note import StudentNote
 from app.models.unit import Unit
 from app.models.user import User
 from app.services import audit_service
@@ -34,12 +42,14 @@ from app.schemas.student_detail import (
     StudentNoteUpdate,
     StudentReviewSubmit,
 )
+from app.schemas.student_edit import StudentEditPayload
 
 from app.services.student_detail_service import (
     get_student_detail,
     save_student_note,
     submit_student_review,
 )
+from app.services.ingestion_service import build_assessment_event, validate_score
 
 router = APIRouter(
     prefix="/lecturer",
@@ -183,7 +193,8 @@ def review_student_verdict(
     current_user: User = Depends(require_teaching_role()),
 ):
     """
-    Records this lecturer's decision on an engine disagreement.
+    Records this lecturer's decision on the current engine verdict,
+    whether or not the engines disagree.
 
     TAKES NO VERDICT ID. The verdict is resolved server-side from
     (student, unit, checkpoint), because the id the browser is holding
@@ -252,3 +263,150 @@ def review_student_verdict(
         )
 
     return detail
+
+
+def _owned_enrollment(db: Session, student_id: int, unit_id: int, lecturer_id: int):
+    unit = db.query(Unit).filter(Unit.id == unit_id, Unit.lecturer_id == lecturer_id).first()
+    enrollment = (
+        db.query(Enrollment)
+        .filter(Enrollment.student_id == student_id, Enrollment.unit_id == unit_id)
+        .first()
+    )
+    return unit, enrollment
+
+
+@router.patch("/students/{student_id}", response_model=StudentDetailResponse)
+def edit_student(
+    request: Request,
+    payload: StudentEditPayload,
+    student_id: int = Path(..., ge=1),
+    unit_id: int = Query(..., ge=1),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_teaching_role()),
+):
+    unit, enrollment = _owned_enrollment(db, student_id, unit_id, current_user.id)
+    student = db.get(Student, student_id)
+    if unit is None or enrollment is None or student is None:
+        raise HTTPException(status_code=404, detail="No such student in a unit you teach.")
+
+    before = {
+        "name": student.name,
+        "email": student.email,
+        "program": student.program,
+        "gender": student.gender,
+        "age": student.age,
+        "scores": payload.scores,
+    }
+    fields = payload.model_dump(exclude_unset=True)
+    fields.pop("scores", None)
+    for field, value in fields.items():
+        setattr(student, field, value)
+
+    criteria = {
+        criterion.id: criterion
+        for criterion in db.query(Criteria).filter(
+            Criteria.unit_id == unit_id,
+            Criteria.id.in_(list(payload.scores)),
+        ).all()
+    }
+    unknown = set(payload.scores) - set(criteria)
+    if unknown:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=f"Unknown criteria for this unit: {sorted(unknown)}")
+
+    for criteria_id, score in payload.scores.items():
+        if score is None:
+            continue
+        error = validate_score(criteria[criteria_id], score)
+        if error:
+            db.rollback()
+            raise HTTPException(status_code=400, detail=error)
+        db.add(
+            build_assessment_event(
+                student,
+                unit_id,
+                criteria[criteria_id],
+                score,
+                EventSource.MANUAL,
+                current_user.id,
+            )
+        )
+
+    audit_service.record(
+        db,
+        action=audit_service.STUDENT_EDITED,
+        actor=current_user,
+        unit=unit,
+        student=student,
+        entity_type="student",
+        entity_id=student.id,
+        summary=f"Edited student data for {student.name} in {unit.unit_code}.",
+        before=before,
+        after=payload.model_dump(exclude_unset=True),
+        request=request,
+    )
+    db.commit()
+    detail = get_student_detail(db, current_user.id, student_id, unit_id)
+    if detail is None:
+        raise HTTPException(status_code=404, detail="Student detail is unavailable after editing.")
+    return detail
+
+
+@router.delete("/students/{student_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_student(
+    request: Request,
+    student_id: int = Path(..., ge=1),
+    unit_id: int = Query(..., ge=1),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_teaching_role()),
+):
+    unit, enrollment = _owned_enrollment(db, student_id, unit_id, current_user.id)
+    student = db.get(Student, student_id)
+    if unit is None or enrollment is None or student is None:
+        raise HTTPException(status_code=404, detail="No such student in a unit you teach.")
+
+    before = {
+        "student_id": student.id,
+        "student_number": student.student_number,
+        "name": student.name,
+        "email": student.email,
+        "program": student.program,
+        "gender": student.gender,
+        "age": student.age,
+        "unit_id": unit_id,
+        "unit_code": unit.unit_code,
+    }
+    audit_service.record(
+        db,
+        action=audit_service.STUDENT_DELETED,
+        actor=current_user,
+        unit=unit,
+        student=student,
+        entity_type="student",
+        entity_id=student.id,
+        summary=f"Deleted {student.name} from {unit.unit_code}.",
+        before=before,
+        request=request,
+    )
+
+    db.query(FinalVerdict).filter(
+        FinalVerdict.student_id == student_id, FinalVerdict.unit_id == unit_id
+    ).delete(synchronize_session=False)
+    db.query(VerdictReview).filter(
+        VerdictReview.student_id == student_id, VerdictReview.unit_id == unit_id
+    ).delete(synchronize_session=False)
+    db.query(RiskScore).filter(
+        RiskScore.student_id == student_id, RiskScore.unit_id == unit_id
+    ).delete(synchronize_session=False)
+    db.query(AssessmentEvent).filter(
+        AssessmentEvent.student_id == student_id, AssessmentEvent.unit_id == unit_id
+    ).delete(synchronize_session=False)
+    db.query(StudentNote).filter(
+        StudentNote.student_id == student_id, StudentNote.unit_id == unit_id
+    ).delete(synchronize_session=False)
+    db.delete(enrollment)
+    db.flush()
+    if not db.query(Enrollment).filter(Enrollment.student_id == student_id).first():
+        db.delete(student)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

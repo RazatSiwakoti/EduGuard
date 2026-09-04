@@ -36,7 +36,7 @@ def get_latest_score(db: Session, student_id: int, unit_id: int, source: str, ch
     )
 
 
-def insufficient_evidence(score: RiskScore) -> bool:
+def not_scoreable(score: RiskScore) -> bool:
     """
     Whether this engine saw too little of the student to state a tier.
 
@@ -49,14 +49,21 @@ def insufficient_evidence(score: RiskScore) -> bool:
     verdicts stay exactly as they were until the next analysis run
     measures them properly.
     """
-    return score.coverage is not None and score.coverage < MIN_EVIDENCE_COVERAGE
+    return bool(score.is_incomplete) or (
+        score.coverage is not None and score.coverage < MIN_EVIDENCE_COVERAGE
+    )
+
+
+# Backward-compatible import for callers outside the production call sites.
+insufficient_evidence = not_scoreable
 
 
 def describe_coverage(score: RiskScore) -> str:
     """A phrase naming what this engine did not see."""
+    if score.missing_criteria:
+        return f"{score.source} has no data for {score.missing_criteria}"
     share = f"{(score.coverage or 0.0) * 100:.0f}%"
-    missing = score.missing_criteria or "some criteria"
-    return f"{score.source} scored only {share} of the evidence (missing: {missing})"
+    return f"{score.source} scored only {share} of the evidence (missing: some criteria)"
 
 
 def build_reason(rule_score: RiskScore, ml_score: RiskScore, requires_review: bool) -> str:
@@ -69,10 +76,10 @@ def build_reason(rule_score: RiskScore, ml_score: RiskScore, requires_review: bo
     # disagreed" is a question about the model; "half this student's
     # record is missing" is a question about the data, and only one of
     # them is answered by looking harder at the student.
-    thin = [score for score in (rule_score, ml_score) if insufficient_evidence(score)]
+    thin = [score for score in (rule_score, ml_score) if not_scoreable(score)]
     if thin:
         return (
-            "Not enough evidence to state a risk level: "
+            "Missing data. Not enough evidence to state a risk level: "
             + "; ".join(describe_coverage(score) for score in thin)
             + ". A missing mark is not a passing mark, so no tier is claimed. "
             + combined
@@ -165,12 +172,12 @@ def compute_and_stage_final_verdict(
     stage a FinalVerdict row. Raises ValueError if either engine hasn't
     scored this student yet - a verdict needs BOTH inputs to exist.
 
-    CARRY-FORWARD (Phase 7.7). When the engines disagree badly enough to
-    need a human, this first checks whether a human already decided this
-    exact disagreement. If so the decision is applied and the student
-    never re-enters the queue. Before this existed, every "Run Analysis"
-    silently discarded every review ever made - the verdict row carrying
-    the decision was superseded, and every read takes the latest.
+    CARRY-FORWARD (Phase 7.7). This checks whether a human already decided
+    this exact engine pair. If so the decision is applied and the student
+    never re-enters the queue, even when the engines now agree. Before this
+    existed, every "Run Analysis" silently discarded every review ever made -
+    the verdict row carrying the decision was superseded, and every read
+    takes the latest.
     """
     rule_score = get_latest_score(db, student_id, unit_id, "rule_based", checkpoint_week)
     ml_score = get_latest_score(db, student_id, unit_id, "ml_model", checkpoint_week)
@@ -197,7 +204,8 @@ def compute_and_stage_final_verdict(
     #
     # It can only ever ADD a review, never remove one: a genuine
     # disagreement stays a disagreement.
-    starved = insufficient_evidence(rule_score) or insufficient_evidence(ml_score)
+    is_missing_data = not_scoreable(rule_score) or not_scoreable(ml_score)
+    starved = is_missing_data
     requires_review = hybrid_result.requires_review or starved
     final_tier = None if requires_review else hybrid_result.final_tier
 
@@ -209,16 +217,16 @@ def compute_and_stage_final_verdict(
         ml_score_id=ml_score.id,
         final_tier=final_tier.value if final_tier else None,
         requires_review=requires_review,
+        is_missing_data=is_missing_data,
         reason=build_reason(rule_score, ml_score, requires_review),
     )
 
-    # Only ever applied to a verdict the engines could NOT resolve. A
-    # verdict they agreed on is an engine result and must stay one - a
-    # stale human decision has no business overriding a fresh consensus.
-    if requires_review:
-        review = get_latest_review(db, student_id, unit_id, checkpoint_week)
-        if review_still_applies(review, rule_score.risk_level, ml_score.risk_level):
-            apply_review_to_verdict(verdict, review)
+    # A matching manual decision supersedes the engine result, including
+    # when the engines agree. review_still_applies prevents applying it to
+    # a different engine pair.
+    review = get_latest_review(db, student_id, unit_id, checkpoint_week)
+    if review_still_applies(review, rule_score.risk_level, ml_score.risk_level):
+        apply_review_to_verdict(verdict, review)
 
     db.add(verdict)
     return verdict
@@ -302,15 +310,6 @@ def submit_review_decision(
     verdict = db.query(FinalVerdict).filter(FinalVerdict.id == verdict_id).first()
     if not verdict:
         raise ValueError(f"FinalVerdict {verdict_id} not found")
-
-    # A verdict the engines agreed on has nothing to resolve. Still
-    # refused - overriding a fresh consensus is a different feature with
-    # different consequences, and silently allowing it here would let the
-    # UI drift into offering it.
-    if not verdict.requires_review and verdict.review_id is None:
-        raise ValueError(
-            f"FinalVerdict {verdict_id} did not require review - nothing to resolve"
-        )
 
     record_review(
         db,

@@ -49,6 +49,7 @@ def run_analysis_for_student(
         "ml_level": ml_score.risk_level,
         "final_tier": verdict.final_tier,
         "requires_review": verdict.requires_review,
+        "is_missing_data": verdict.is_missing_data,
     }
 
 
@@ -77,6 +78,7 @@ def run_analysis_for_students(
         "failed": len(errors),
         "results": results,
         "errors": errors,
+        "missing_data": sum(1 for result in results if result["is_missing_data"]),
     }
 
 
@@ -160,11 +162,13 @@ def summarise_changes(before: dict[int, dict], results: list[dict]) -> dict:
         "review_resolved_by_engines": 0,
         "lecturer_decisions_carried": 0,
         "lecturer_decisions_invalidated": 0,
+        "missing_data": 0,
         "movements": [],
     }
 
     for result in results:
         student_id = result["student_id"]
+        summary["missing_data"] += int(bool(result.get("is_missing_data")))
         after_tier = result.get("final_tier")
         after_review = bool(result.get("requires_review"))
         prior = before.get(student_id)

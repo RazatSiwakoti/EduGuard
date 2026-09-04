@@ -80,6 +80,29 @@ export default function ImportResult({
         />
       </div>
 
+      {result.incomplete_count > 0 && (
+        <section className="rounded-lg border border-amber-200 bg-amber-50 p-5">
+          <div className="flex gap-3">
+            <CircleAlert className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" aria-hidden="true" />
+            <div className="min-w-0">
+              <h3 className="text-sm font-semibold text-amber-900">
+                {result.incomplete_count} student{result.incomplete_count === 1 ? "" : "s"} have missing data
+              </h3>
+              <p className="mt-1 text-xs leading-relaxed text-amber-900">
+                These students were imported and will be analysed, but no risk level will be claimed for them until the gaps are filled. They appear under Needs Review.
+              </p>
+              <ul className="mt-3 space-y-1 text-xs text-amber-900">
+                {result.incomplete_students.map((student) => (
+                  <li key={student.student_number}>
+                    <span className="font-medium">{student.student_number}</span> · {student.name} — {student.missing.join(", ")}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </section>
+      )}
+
       {analysis && analysis.failed > 0 && (
         <p className="rounded-md bg-stone-50 px-4 py-3 text-xs leading-relaxed text-stone-600">
           {analysis.failed === 1

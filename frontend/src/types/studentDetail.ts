@@ -138,6 +138,15 @@ export interface StudentReviewSubmit {
   comment?: string;
 }
 
+export interface StudentEditPayload {
+  name?: string;
+  email?: string | null;
+  program?: string | null;
+  gender?: string | null;
+  age?: number | null;
+  scores?: Record<number, number | null>;
+}
+
 /** Identifies which card to open. Both halves are required — risk is per unit. */
 export interface StudentCardTarget {
   studentId: number;

@@ -68,6 +68,7 @@ export interface BucketStyle {
   pill: string;
   /** Short description shown in tooltips and the legend's title text. */
   hint: string;
+  dot: string;
 }
 
 export const BUCKET_STYLES: Record<RiskBucket, BucketStyle> = {
@@ -75,26 +76,31 @@ export const BUCKET_STYLES: Record<RiskBucket, BucketStyle> = {
     fill: "#d03b3b", // status: critical
     pill: "bg-red-50 text-red-700 ring-red-200",
     hint: "Both engines agree this student is at high risk",
+    dot: "bg-red-500",
   },
   low_risk: {
     fill: "#fab219", // status: warning
     pill: "bg-amber-50 text-amber-800 ring-amber-200",
     hint: "Showing early warning signs, worth monitoring",
+    dot: "bg-amber-500",
   },
   safe: {
     fill: "#0ca30c", // status: good
     pill: "bg-green-50 text-green-700 ring-green-200",
     hint: "Tracking well against every criterion",
+    dot: "bg-green-500",
   },
   needs_review: {
     fill: "#4a3aa7", // categorical violet — a state, not a severity
     pill: "bg-violet-50 text-violet-700 ring-violet-200",
     hint: "Rule engine and ML model disagreed — awaiting your decision",
+    dot: "bg-violet-500",
   },
   not_analysed: {
     fill: "#898781", // muted grey — absence of data, deliberately dull
     pill: "bg-stone-100 text-stone-600 ring-stone-200",
     hint: "Enrolled, but the analysis has never been run for this student",
+    dot: "bg-stone-400",
   },
 };
 

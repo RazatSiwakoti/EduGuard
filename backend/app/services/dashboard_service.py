@@ -270,6 +270,7 @@ def _build_criteria_payload(
                 "threshold": criterion.threshold,
                 "max_score": criterion.max_score,
                 "trend_value": event.trend_value,
+                "weekly_values": event.weekly_values,
             }
         )
 
@@ -336,6 +337,7 @@ def get_lecturer_dashboard(
                 "analysed": verdict is not None,
                 "final_tier": verdict.final_tier if verdict else None,
                 "requires_review": verdict.requires_review if verdict else False,
+                "is_missing_data": verdict.is_missing_data if verdict else False,
                 "reason": verdict.reason if verdict else None,
                 "checkpoint_week": verdict.checkpoint_week if verdict else None,
                 "computed_at": verdict.created_at if verdict else None,

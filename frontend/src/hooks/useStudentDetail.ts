@@ -5,6 +5,7 @@ import type {
   StudentDetailResponse,
   StudentNoteDetail,
   StudentReviewSubmit,
+  StudentEditPayload,
 } from "../types/studentDetail";
 
 const KEY = ["lecturer-student-detail"];
@@ -93,6 +94,46 @@ export function useSubmitReview(target: StudentCardTarget | null, checkpointWeek
         [...KEY, target?.studentId, target?.unitId, checkpointWeek],
         detail,
       );
+      queryClient.invalidateQueries({ queryKey: ["lecturer-dashboard"] });
+    },
+  });
+}
+
+export function useSubmitRowReview(studentId: number, unitId: number, checkpointWeek = 8) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: StudentReviewSubmit) =>
+      studentDetailService.submitReview(studentId, unitId, payload, checkpointWeek),
+    onSuccess: (detail) => {
+      queryClient.setQueryData([...KEY, studentId, unitId, checkpointWeek], detail);
+      queryClient.invalidateQueries({ queryKey: ["lecturer-dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["student-detail", studentId, unitId] });
+      queryClient.invalidateQueries({ queryKey: ["lecturer-alert-queue"] });
+    },
+  });
+}
+
+export function useUpdateStudent() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      studentId,
+      unitId,
+      payload,
+    }: { studentId: number; unitId: number; payload: StudentEditPayload }) =>
+      studentDetailService.updateStudent(studentId, unitId, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["lecturer-dashboard"] });
+    },
+  });
+}
+
+export function useDeleteStudent() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ studentId, unitId }: { studentId: number; unitId: number }) =>
+      studentDetailService.deleteStudent(studentId, unitId),
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["lecturer-dashboard"] });
     },
   });

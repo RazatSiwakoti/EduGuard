@@ -215,6 +215,7 @@ def run_analysis(
         total_students=total("total_students"),
         succeeded=total("succeeded"),
         failed=total("failed"),
+        missing_data=total("missing_data"),
         newly_analysed=total("newly_analysed"),
         moved_toward_risk=total("moved_toward_risk"),
         moved_away_from_risk=total("moved_away_from_risk"),

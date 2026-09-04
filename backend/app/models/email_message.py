@@ -50,7 +50,7 @@ class EmailMessage(Base):
     kind = Column(String, nullable=False, default="student_alert", index=True)
 
     # NULL on a lecturer summary, which is about a cohort, not a student.
-    student_id = Column(Integer, ForeignKey("students.id"), nullable=True, index=True)
+    student_id = Column(Integer, ForeignKey("students.id", ondelete="SET NULL"), nullable=True, index=True)
     unit_id = Column(Integer, ForeignKey("units.id"), nullable=True, index=True)
 
     # The lecturer this message belongs to - the recipient of a summary,
@@ -79,7 +79,7 @@ class EmailMessage(Base):
     # it. If a student ever asks why they were emailed, this is the
     # answer - traceable to two engine scores and their explanations.
     risk_tier = Column(String, nullable=True)
-    verdict_id = Column(Integer, ForeignKey("final_verdicts.id"), nullable=True)
+    verdict_id = Column(Integer, ForeignKey("final_verdicts.id", ondelete="SET NULL"), nullable=True)
 
     # "automatic" (weekly sweep) | "manual" (a lecturer pressed send).
     trigger = Column(String, nullable=False, default="manual", index=True)

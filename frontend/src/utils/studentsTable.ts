@@ -71,6 +71,7 @@ export interface MetricValue {
   threshold: number;
   maxScore: number;
   trendValue: number | null;
+  weeklyValues: (string | boolean | null)[] | null;
   /**
    * True when the unit defines more than one criterion in this
    * category. The rule engine scores all of them; the ML model keeps
@@ -119,6 +120,7 @@ function singleMetric(
     threshold: criterion.threshold,
     maxScore: criterion.max_score,
     trendValue: criterion.trend_value,
+    weeklyValues: criterion.weekly_values,
     ambiguous: matches.length > 1,
   };
 }
@@ -131,13 +133,21 @@ export function attendanceOf(student: DashboardStudent): MetricValue | null {
 /**
  * Weekly tutorial completion percentage, or null.
  *
- * This is a PERCENTAGE, deliberately not "4 of 6". `ingestion_service`
- * aggregates the six W2–W7 cells into one percentage plus a trend and
- * discards the weekly values, so a count could only be back-multiplied
- * from the percentage — reconstruction, not data.
+ * The percentage remains the bar value; weekly_values lets the cell show
+ * the more useful submitted/total headline when available.
  */
 export function tutorialOf(student: DashboardStudent): MetricValue | null {
   return singleMetric(student, "weekly_tut");
+}
+
+export function completedWeeks(
+  values: (string | boolean | null)[] | null,
+): { done: number; total: number } | null {
+  if (values === null) return null;
+  return {
+    done: values.filter((value) => value === true || value === "submitted" || value === "late").length,
+    total: values.length,
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -168,6 +178,8 @@ export interface AssessmentProgress {
    * a plain count instead of "n of m" in that case.
    */
   totalUnknown: boolean;
+  /** True when the unit criteria list was unavailable but marks exist. */
+  unitTotalUnavailable: boolean;
 }
 
 /**
@@ -201,7 +213,8 @@ export function assessmentProgressOf(
   // GET /lecturer/units returns units with no criteria, and a unit
   // could in principle be missing from the list entirely. Fall back to
   // what the student has rather than dividing by zero.
-  const totalUnknown = unitAssessments.length === 0;
+  const unitTotalUnavailable = unitAssessments.length === 0 && marks.size > 0;
+  const totalUnknown = unitAssessments.length === 0 && marks.size === 0;
 
   const items: AssessmentItem[] = totalUnknown
     ? [...marks.values()].map((criterion) => ({
@@ -237,6 +250,7 @@ export function assessmentProgressOf(
         : null,
     items,
     totalUnknown,
+    unitTotalUnavailable,
   };
 }
 

@@ -25,6 +25,7 @@ interface AuthContextType {
    * a user manual instead of in the code.
    */
   refreshUser: () => Promise<void>;
+  applyUser: (user: User) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -78,13 +79,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  function applyUser(updatedUser: User) {
+    setUser(updatedUser);
+  }
+
   function logout() {
     localStorage.removeItem("access_token");
     setUser(null);
   }
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, logout, refreshUser }}>
+    <AuthContext.Provider
+      value={{ user, isLoading, login, logout, refreshUser, applyUser }}
+    >
       {children}
     </AuthContext.Provider>
   );

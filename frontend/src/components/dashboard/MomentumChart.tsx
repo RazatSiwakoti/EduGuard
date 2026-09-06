@@ -12,7 +12,7 @@ import { TrendingDown, TrendingUp } from "lucide-react";
 import type { MomentumRow } from "../../utils/dashboardAggregations";
 import { MOMENTUM_BAND_PP } from "../../utils/dashboardAggregations";
 import ChartCard from "./ChartCard";
-import { CHART_INK, DIVERGING, MARK_GAP_PX, MARK_RADIUS_PX } from "./chartTheme";
+import { DIVERGING, MARK_GAP_PX, MARK_RADIUS_PX, useChartInk } from "./chartTheme";
 import { pluralStudents, toNumber, toText, tooltipContentStyle } from "./tooltipFormat";
 
 interface MomentumChartProps {
@@ -47,6 +47,7 @@ interface MomentumChartProps {
  * chart never depends on hue alone.
  */
 export default function MomentumChart({ rows }: MomentumChartProps) {
+  const ink = useChartInk();
   const hasData = rows.length > 0;
 
   return (
@@ -84,7 +85,7 @@ export default function MomentumChart({ rows }: MomentumChartProps) {
           margin={{ top: 0, right: 16, bottom: 0, left: 8 }}
           barCategoryGap="34%"
         >
-          <CartesianGrid horizontal={false} stroke={CHART_INK.grid} />
+          <CartesianGrid horizontal={false} stroke={ink.grid} />
 
           <XAxis
             type="number"
@@ -93,15 +94,15 @@ export default function MomentumChart({ rows }: MomentumChartProps) {
             // rendering device to push the bar left of zero, so it is
             // stripped from the tick labels.
             tickFormatter={(value: number) => `${Math.abs(value)}`}
-            tick={{ fontSize: 11, fill: CHART_INK.muted }}
-            axisLine={{ stroke: CHART_INK.axis }}
+            tick={{ fontSize: 11, fill: ink.muted }}
+            axisLine={{ stroke: ink.axis }}
             tickLine={false}
           />
           <YAxis
             type="category"
             dataKey="label"
             width={104}
-            tick={{ fontSize: 11, fill: CHART_INK.muted }}
+            tick={{ fontSize: 11, fill: ink.muted }}
             axisLine={false}
             tickLine={false}
           />
@@ -119,19 +120,19 @@ export default function MomentumChart({ rows }: MomentumChartProps) {
               const row = rows.find((r) => r.label === label);
               return row ? `${row.label} · ${row.stable} steady` : label;
             }}
-            contentStyle={tooltipContentStyle(CHART_INK.grid, CHART_INK.secondary)}
+            contentStyle={tooltipContentStyle(ink.grid, ink.secondary)}
           />
 
           {/* The anchor the whole chart is read against. Drawn heavier
               than the grid so the split point is unmistakable. */}
-          <ReferenceLine x={0} stroke={CHART_INK.axis} strokeWidth={1.5} />
+          <ReferenceLine x={0} stroke={ink.axis} strokeWidth={1.5} />
 
           <Bar
             dataKey="declining"
             name="Declining"
             stackId="momentum"
             fill={DIVERGING.negative}
-            stroke={CHART_INK.surface}
+            stroke={ink.surface}
             strokeWidth={MARK_GAP_PX}
             radius={MARK_RADIUS_PX}
             isAnimationActive={false}
@@ -141,7 +142,7 @@ export default function MomentumChart({ rows }: MomentumChartProps) {
             name="Improving"
             stackId="momentum"
             fill={DIVERGING.positive}
-            stroke={CHART_INK.surface}
+            stroke={ink.surface}
             strokeWidth={MARK_GAP_PX}
             radius={MARK_RADIUS_PX}
             isAnimationActive={false}

@@ -9,6 +9,7 @@ from typing import Optional
 from pydantic import BaseModel, EmailStr, Field, ConfigDict
 
 from app.models.enums import UserRole
+from app.schemas.preferences import Preferences
 
 
 # LOGIN REQUEST
@@ -43,6 +44,7 @@ class UserOut(BaseModel):
     id: int
     email: EmailStr
     full_name: str
+    avatar: Optional[str] = None
     role: UserRole
     is_active: bool
     created_at: datetime
@@ -63,3 +65,23 @@ class MeOut(UserOut):
     screen never asks - an N+1 introduced for a field nothing reads.
     """
     holds_units: bool
+    preferences: Preferences
+
+
+class ProfileUpdate(BaseModel):
+    """
+    Update the signed-in user's profile details.
+
+    Email is deliberately absent: it is the login identifier and unique key,
+    and every alert and audit row is attributed to it. Only an admin changes it.
+    """
+    full_name: str = Field(..., min_length=2, max_length=120)
+
+
+class PasswordChange(BaseModel):
+    current_password: str
+    new_password: str = Field(..., min_length=8, max_length=64)
+
+
+class AvatarUpload(BaseModel):
+    data_url: str = Field(..., max_length=90_000)

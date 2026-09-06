@@ -3,7 +3,7 @@ import type { RiskBucket } from "../../types/dashboard";
 import type { BucketSlice } from "../../utils/dashboardAggregations";
 import BucketBadge from "./BucketBadge";
 import ChartCard from "./ChartCard";
-import { BUCKET_STYLES, CHART_INK, MARK_GAP_PX } from "./chartTheme";
+import { BUCKET_STYLES, MARK_GAP_PX, useChartInk } from "./chartTheme";
 import { pluralStudents, toNumber, toText, tooltipContentStyle } from "./tooltipFormat";
 
 interface RiskDistributionDonutProps {
@@ -34,6 +34,7 @@ export default function RiskDistributionDonut({
   activeBucket,
   onSelect,
 }: RiskDistributionDonutProps) {
+  const ink = useChartInk();
   const total = slices.reduce((sum, slice) => sum + slice.count, 0);
 
   // Index-based lookup rather than reading Recharts' event payload —
@@ -66,7 +67,7 @@ export default function RiskDistributionDonut({
                 // Produces the mandated surface gap between segments so
                 // adjacent fills never bleed into one another.
                 paddingAngle={MARK_GAP_PX}
-                stroke={CHART_INK.surface}
+                stroke={ink.surface}
                 strokeWidth={MARK_GAP_PX}
                 isAnimationActive={false}
                 onClick={handleSliceClick}
@@ -94,7 +95,7 @@ export default function RiskDistributionDonut({
                     toText(name),
                   ];
                 }}
-                contentStyle={tooltipContentStyle(CHART_INK.grid, CHART_INK.secondary)}
+                contentStyle={tooltipContentStyle(ink.grid, ink.secondary)}
               />
             </PieChart>
           </ResponsiveContainer>

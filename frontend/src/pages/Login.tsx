@@ -27,6 +27,8 @@ const LOADING_STEPS = [
 ];
 
 export default function Login() {
+  // Deliberately light-only: this marketing-style splash is seen once per
+  // session, and converting its inline visual treatment adds no value.
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPass, setShowPass] = useState(false);

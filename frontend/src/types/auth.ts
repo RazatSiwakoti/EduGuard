@@ -20,10 +20,19 @@ export interface LoginResponse {
 // analysis (app.models.student), never as accounts that sign in.
 export type UserRole = "lecturer" | "admin" | "super_admin";
 
+export interface Preferences {
+  theme: "light" | "dark" | "system";
+  font_size: "small" | "default" | "large" | "larger";
+  reduce_motion: boolean;
+  high_contrast: boolean;
+  colourblind_safe: boolean;
+}
+
 export interface User {
   id: number;
   email: string;
   full_name: string;
+  avatar: string | null;
   role: UserRole;
   is_active: boolean;
   created_at: string;
@@ -41,4 +50,5 @@ export interface User {
    * on the lecturer surface and this flag is false for them.
    */
   holds_units: boolean;
+  preferences: Preferences;
 }

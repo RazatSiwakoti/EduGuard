@@ -11,7 +11,7 @@ import type { UnitRiskRow } from "../../utils/dashboardAggregations";
 import { BUCKET_LABELS, BUCKET_ORDER } from "../../utils/dashboardAggregations";
 import BucketBadge from "./BucketBadge";
 import ChartCard from "./ChartCard";
-import { BUCKET_STYLES, CHART_INK, MARK_GAP_PX, MARK_RADIUS_PX } from "./chartTheme";
+import { BUCKET_STYLES, MARK_GAP_PX, MARK_RADIUS_PX, useChartInk } from "./chartTheme";
 import { toNumber, toText, tooltipContentStyle } from "./tooltipFormat";
 import { useChartIntroAnimation } from "../../utils/chartAnimation";
 
@@ -43,6 +43,7 @@ export default function RiskByUnitChart({ rows, onSelectUnit }: RiskByUnitChartP
   // than Recharts' own isAnimationActive, which does nothing at
   // this version.
   const intro = useChartIntroAnimation();
+  const ink = useChartInk();
 
   const hasData = rows.some((row) => row.total > 0);
 
@@ -78,20 +79,20 @@ export default function RiskByUnitChart({ rows, onSelectUnit }: RiskByUnitChartP
         >
           {/* Grid only along the measured axis. A grid line across the
               category axis would add ink without aiding comparison. */}
-          <CartesianGrid horizontal={false} stroke={CHART_INK.grid} />
+          <CartesianGrid horizontal={false} stroke={ink.grid} />
 
           <XAxis
             type="number"
             allowDecimals={false}
-            tick={{ fontSize: 11, fill: CHART_INK.muted }}
-            axisLine={{ stroke: CHART_INK.axis }}
+            tick={{ fontSize: 11, fill: ink.muted }}
+            axisLine={{ stroke: ink.axis }}
             tickLine={false}
           />
           <YAxis
             type="category"
             dataKey="unitCode"
             width={78}
-            tick={{ fontSize: 11, fill: CHART_INK.muted }}
+            tick={{ fontSize: 11, fill: ink.muted }}
             axisLine={false}
             tickLine={false}
           />
@@ -107,7 +108,7 @@ export default function RiskByUnitChart({ rows, onSelectUnit }: RiskByUnitChartP
               const row = rows.find((r) => r.unitCode === unitCode);
               return row ? `${row.unitCode} — ${row.unitName}` : unitCode;
             }}
-            contentStyle={tooltipContentStyle(CHART_INK.grid, CHART_INK.secondary)}
+            contentStyle={tooltipContentStyle(ink.grid, ink.secondary)}
           />
 
           {BUCKET_ORDER.map((bucket) => (
@@ -120,7 +121,7 @@ export default function RiskByUnitChart({ rows, onSelectUnit }: RiskByUnitChartP
               // A surface-coloured stroke is how a real gap between
               // stacked segments is achieved in Recharts — without it
               // adjacent fills touch and the boundary disappears.
-              stroke={CHART_INK.surface}
+              stroke={ink.surface}
               strokeWidth={MARK_GAP_PX}
               radius={MARK_RADIUS_PX}
               {...intro}

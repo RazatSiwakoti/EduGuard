@@ -8,7 +8,7 @@ forgets to pass `role` fails loudly (IntegrityError) instead of
 silently creating a Lecturer - fail closed, not fail open.
 """
 
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Enum
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Enum, Text, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -24,6 +24,7 @@ class User(Base):
     # Identity
     email = Column(String, unique=True, index=True, nullable=False)
     full_name = Column(String, nullable=False)
+    avatar = Column(Text, nullable=True)  # Never a filesystem path; a data:image/webp;base64,... string or NULL.
 
     # Authentication
     hashed_password = Column(String, nullable=False)
@@ -41,6 +42,7 @@ class User(Base):
     )
 
     is_active = Column(Boolean, default=True)
+    preferences = Column(JSON, nullable=False, server_default="{}")
 
     # Audit fields
     created_at = Column(DateTime(timezone=True), server_default=func.now())

@@ -11,7 +11,7 @@ import {
 } from "recharts";
 import type { CriteriaPerformanceRow } from "../../utils/dashboardAggregations";
 import ChartCard from "./ChartCard";
-import { CHART_INK, MARK_RADIUS_PX, SERIES_BLUE } from "./chartTheme";
+import { MARK_RADIUS_PX, SERIES_BLUE, useChartInk } from "./chartTheme";
 import { toNumber, toText, tooltipContentStyle } from "./tooltipFormat";
 import { useChartIntroAnimation } from "../../utils/chartAnimation";
 
@@ -53,6 +53,7 @@ export default function CriteriaPerformanceChart({
   // than Recharts' own isAnimationActive, which does nothing at
   // this version.
   const intro = useChartIntroAnimation();
+  const ink = useChartInk();
 
   // Headroom above the tallest bar so its label never collides with the
   // top of the plot. Always at least 120 so the threshold line sits
@@ -78,18 +79,18 @@ export default function CriteriaPerformanceChart({
           margin={{ top: 24, right: 68, bottom: 0, left: 0 }}
           barCategoryGap="34%"
         >
-          <CartesianGrid vertical={false} stroke={CHART_INK.grid} />
+          <CartesianGrid vertical={false} stroke={ink.grid} />
 
           <XAxis
             dataKey="label"
-            tick={{ fontSize: 11, fill: CHART_INK.muted }}
-            axisLine={{ stroke: CHART_INK.axis }}
+            tick={{ fontSize: 11, fill: ink.muted }}
+            axisLine={{ stroke: ink.axis }}
             tickLine={false}
           />
           <YAxis
             domain={[0, upperBound]}
             tickFormatter={(value: number) => `${value}%`}
-            tick={{ fontSize: 11, fill: CHART_INK.muted }}
+            tick={{ fontSize: 11, fill: ink.muted }}
             axisLine={false}
             tickLine={false}
             width={46}
@@ -109,19 +110,19 @@ export default function CriteriaPerformanceChart({
               // "are they passing", this says "by how much, in reality".
               return `${row.label} · avg ${row.averageScore} vs threshold ${row.averageThreshold} · ${row.belowThreshold}/${row.sampleSize} below`;
             }}
-            contentStyle={tooltipContentStyle(CHART_INK.grid, CHART_INK.secondary)}
+            contentStyle={tooltipContentStyle(ink.grid, ink.secondary)}
           />
 
           {/* The whole point of normalising: one line that is the pass
               mark for every category simultaneously. */}
           <ReferenceLine
             y={100}
-            stroke={CHART_INK.axis}
+            stroke={ink.axis}
             strokeDasharray="4 4"
             label={{
               value: "Threshold",
               position: "right",
-              fill: CHART_INK.muted,
+              fill: ink.muted,
               fontSize: 10,
             }}
           />
@@ -142,7 +143,7 @@ export default function CriteriaPerformanceChart({
               position="top"
               offset={8}
               // Labels wear text ink, never the series colour.
-              fill={CHART_INK.secondary}
+              fill={ink.secondary}
               fontSize={11}
               formatter={(value: unknown) => `${toNumber(value)}%`}
             />

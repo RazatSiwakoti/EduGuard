@@ -5,6 +5,24 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>frontend</title>
+    <script>
+      // Applies the cached preferences before React exists. Without this
+      // the page paints white, mounts, calls /auth/me, and only then goes
+      // dark - a visible flash on every single navigation to the app.
+      // localStorage PAINTS; the server DECIDES. AppearanceProvider
+      // reconciles the two as soon as /auth/me returns.
+      try {
+        var p = JSON.parse(localStorage.getItem("eduguard:prefs") || "{}");
+        var dark = p.theme === "dark" || (p.theme !== "light" &&
+          window.matchMedia("(prefers-color-scheme: dark)").matches);
+        var r = document.documentElement;
+        if (dark) r.classList.add("dark");
+        if (p.high_contrast) r.classList.add("hc");
+        if (p.reduce_motion) r.classList.add("reduce-motion");
+        if (p.colourblind_safe) r.classList.add("cvd");
+        r.dataset.fontSize = p.font_size || "default";
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

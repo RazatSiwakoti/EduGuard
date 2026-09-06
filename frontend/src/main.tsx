@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "sonner";
 import App from "./App.tsx";
 import { AuthProvider } from "./context/AuthContext.tsx";
+import { AppearanceProvider } from "./context/AppearanceContext.tsx";
 import "./index.css";
 
 // One shared query client for the whole app — holds cache for every
@@ -16,7 +17,9 @@ createRoot(document.getElementById("root")!).render(
     <BrowserRouter>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
-          <App />
+          <AppearanceProvider>
+            <App />
+          </AppearanceProvider>
           {/* Renders toast notifications triggered anywhere in the app */}
           <Toaster position="top-right" richColors />
         </AuthProvider>

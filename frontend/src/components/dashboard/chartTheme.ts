@@ -28,6 +28,8 @@
  */
 
 import type { RiskBucket, RiskTier } from "../../types/dashboard";
+import { useEffect, useState } from "react";
+import { useAppearance } from "../../context/AppearanceContext";
 
 /* ------------------------------------------------------------------ */
 /* Chart chrome — recessive by design                                  */
@@ -46,6 +48,34 @@ export const CHART_INK = {
   secondary: "#52514e",
   primary: "#0b0b0b",
 } as const;
+
+export const CHART_INK_DARK = {
+  surface: "#1c1b20",
+  grid: "#333138",
+  axis: "#7a7880",
+  muted: "#b5b3ba",
+  secondary: "#cecbd3",
+  primary: "#f4f3f6",
+} as const;
+
+export function useChartInk() {
+  const { preferences } = useAppearance();
+  const [systemDark, setSystemDark] = useState(() =>
+    window.matchMedia("(prefers-color-scheme: dark)").matches,
+  );
+
+  useEffect(() => {
+    if (preferences.theme !== "system") return;
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+    const handleChange = (event: MediaQueryListEvent) => setSystemDark(event.matches);
+    mediaQuery.addEventListener("change", handleChange);
+    return () => mediaQuery.removeEventListener("change", handleChange);
+  }, [preferences.theme]);
+
+  const isDark = preferences.theme === "dark" ||
+    (preferences.theme === "system" && systemDark);
+  return isDark ? CHART_INK_DARK : CHART_INK;
+}
 
 /**
  * Gap rendered between adjacent or stacked marks. Implemented as a
@@ -166,5 +196,5 @@ export function sequentialStep(count: number, maxCount: number): string | null {
 export function sequentialTextClass(count: number, maxCount: number): string {
   if (count === 0 || maxCount === 0) return "text-stone-300";
   const ratio = count / maxCount;
-  return ratio >= 0.5 ? "text-white" : "text-stone-900";
+  return ratio >= 0.5 ? "text-[#ffffff]" : "text-stone-900";
 }

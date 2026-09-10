@@ -58,7 +58,7 @@ export default function CriteriaStatusCell({ unitId }: CriteriaStatusCellProps) 
     >
       {data.total_percentage}%
       {data.lock.locked && (
-        <span className="ml-1 rounded bg-stone-100 px-1.5 py-0.5 text-[11px] font-medium text-stone-600">
+        <span className="ml-1 rounded bg-stone-100 px-1.5 py-0.5 text-[0.625rem] font-medium text-stone-600">
           locked
         </span>
       )}

@@ -53,6 +53,7 @@ THRESHOLD_CHANGED = "threshold.changed"
 CRITERIA_UNLOCKED = "criteria.unlocked"
 CRITERIA_SHAPE_REPLACED = "criteria.shape_replaced"
 VERDICT_OVERRIDDEN = "verdict.overridden"
+UNIT_ASSIGNED = "unit.assigned"
 STUDENT_EDITED = "student.edited"
 STUDENT_DELETED = "student.deleted"
 
@@ -61,6 +62,7 @@ ACTION_LABELS: dict[str, str] = {
     CRITERIA_UNLOCKED: "Unit shape unlocked",
     CRITERIA_SHAPE_REPLACED: "Unit shape replaced",
     VERDICT_OVERRIDDEN: "Verdict overridden",
+    UNIT_ASSIGNED: "Unit assignment changed",
     STUDENT_EDITED: "Student data edited",
     STUDENT_DELETED: "Student deleted",
 }
@@ -78,6 +80,8 @@ ACTION_DESCRIPTIONS: dict[str, str] = {
     VERDICT_OVERRIDDEN:
         "A lecturer decided an engine disagreement, setting a student's final "
         "tier by hand.",
+    UNIT_ASSIGNED:
+        "An administrator assigned or unassigned a teaching unit.",
     STUDENT_EDITED: "A lecturer edited student demographics or appended manual scores.",
     STUDENT_DELETED: "A lecturer permanently deleted a student's data from a unit.",
 }

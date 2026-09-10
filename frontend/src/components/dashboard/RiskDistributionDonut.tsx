@@ -3,7 +3,7 @@ import type { RiskBucket } from "../../types/dashboard";
 import type { BucketSlice } from "../../utils/dashboardAggregations";
 import BucketBadge from "./BucketBadge";
 import ChartCard from "./ChartCard";
-import { BUCKET_STYLES, MARK_GAP_PX, useChartInk } from "./chartTheme";
+import { MARK_GAP_PX, useBucketStyles, useChartInk } from "./chartTheme";
 import { pluralStudents, toNumber, toText, tooltipContentStyle } from "./tooltipFormat";
 
 interface RiskDistributionDonutProps {
@@ -34,6 +34,7 @@ export default function RiskDistributionDonut({
   activeBucket,
   onSelect,
 }: RiskDistributionDonutProps) {
+  const bucketStyles = useBucketStyles();
   const ink = useChartInk();
   const total = slices.reduce((sum, slice) => sum + slice.count, 0);
 
@@ -75,7 +76,7 @@ export default function RiskDistributionDonut({
                 {slices.map((slice) => (
                   <Cell
                     key={slice.bucket}
-                    fill={BUCKET_STYLES[slice.bucket].fill}
+                    fill={bucketStyles[slice.bucket].fill}
                     // Dimming the unselected segments makes the active
                     // filter obvious without moving anything around.
                     opacity={

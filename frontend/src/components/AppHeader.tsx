@@ -1,8 +1,10 @@
 import { Link } from "react-router-dom";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { Bell, ChevronDown } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
-import { getInitials, formatRole } from "../utils/userDisplay";
+import { formatRole } from "../utils/userDisplay";
+import Avatar from "./Avatar";
+import NotificationBell from "./notifications/NotificationBell";
 
 // Top bar for every authenticated page. Mounted ONCE by AppShell as
 // part of the layout route, so it survives navigation instead of being
@@ -21,23 +23,14 @@ export default function AppHeader() {
   return (
     // Fixed height matches the sidebar's brand block, so the two
     // borders meet in one unbroken horizontal line across the top.
-    <header className="flex h-[57px] shrink-0 items-center justify-between border-b border-stone-200 bg-white px-6">
+    <header className="flex min-h-[3.5rem] shrink-0 items-center justify-between border-b border-stone-200 bg-white px-6 py-3">
       <p className="truncate text-xs italic text-stone-400">
         Early Detection · Timely Action · Better Outcomes
       </p>
 
       {/* Right side: notifications + user menu */}
       <div className="flex items-center gap-4">
-        {/* Placeholder — not wired to a real notification system yet,
-            since the alert/notification backend hasn't been built. */}
-        <button
-          type="button"
-          className="relative rounded-full p-2 text-stone-500 transition hover:bg-stone-100"
-          aria-label="Notifications"
-        >
-          <Bell className="h-5 w-5" />
-          <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-red-500" />
-        </button>
+        <NotificationBell />
 
         <DropdownMenu.Root>
           <DropdownMenu.Trigger asChild>
@@ -45,9 +38,7 @@ export default function AppHeader() {
               type="button"
               className="flex items-center gap-2 rounded-md px-2 py-1.5 transition hover:bg-stone-100"
             >
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-stone-800 text-xs font-semibold text-white">
-                {getInitials(user.full_name)}
-              </div>
+              <Avatar src={user.avatar} name={user.full_name} size="md" className="ring-2 ring-stone-200 dark:ring-stone-700" />
               <div className="text-left">
                 <p className="text-sm font-medium leading-tight text-stone-900">
                   {user.full_name}

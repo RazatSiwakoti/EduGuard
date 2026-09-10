@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useAppearance } from "../context/AppearanceContext";
 
 /**
  * Let a chart animate in once, on first paint, and never again.
@@ -31,12 +32,14 @@ export function useChartIntroAnimation(durationMs = 700): {
   isAnimationActive: boolean;
   animationDuration: number;
 } {
+  const { preferences } = useAppearance();
   const prefersReducedMotion =
     typeof window !== "undefined" &&
     typeof window.matchMedia === "function" &&
     window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const off = prefersReducedMotion || preferences.reduce_motion;
 
-  const [active, setActive] = useState(!prefersReducedMotion);
+  const [active, setActive] = useState(!off);
 
   useEffect(() => {
     if (!active) return;

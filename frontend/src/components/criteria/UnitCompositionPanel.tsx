@@ -153,7 +153,7 @@ export default function UnitCompositionPanel({ unitId }: UnitCompositionPanelPro
           {shape.lock.locked && (
             <span
               title={shape.lock.reasons.join(" ")}
-              className="inline-flex items-center gap-1 rounded bg-stone-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-stone-500"
+              className="inline-flex items-center gap-1 rounded bg-stone-100 px-1.5 py-0.5 text-[0.625rem] font-medium uppercase tracking-wide text-stone-500"
             >
               <Lock className="h-2.5 w-2.5" aria-hidden="true" />
               Composition locked
@@ -222,7 +222,7 @@ export default function UnitCompositionPanel({ unitId }: UnitCompositionPanelPro
                       {criterion.name}
                     </span>
                     {criterion.kind && (
-                      <span className="ml-2 rounded bg-stone-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-stone-500">
+                      <span className="ml-2 rounded bg-stone-100 px-1.5 py-0.5 text-[0.625rem] font-medium uppercase tracking-wide text-stone-500">
                         {criterion.kind}
                       </span>
                     )}

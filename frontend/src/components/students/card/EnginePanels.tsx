@@ -3,7 +3,7 @@ import type { LucideIcon } from "lucide-react";
 import type { StudentDetailResponse, StudentEngineDetail } from "../../../types/studentDetail";
 import { BUCKET_LABELS } from "../../../utils/dashboardAggregations";
 import { explanationPhrases, formatDateTime } from "../../../utils/studentCard";
-import { BUCKET_STYLES } from "../../dashboard/chartTheme";
+import { useBucketStyles } from "../../dashboard/chartTheme";
 
 interface EnginePanelProps {
   title: string;
@@ -28,7 +28,8 @@ function EnginePanel({ title, icon: Icon, engine, scoreCaption }: EnginePanelPro
   }
 
   const phrases = explanationPhrases(engine.explanation);
-  const style = BUCKET_STYLES[engine.tier];
+  const bucketStyles = useBucketStyles();
+  const style = bucketStyles[engine.tier];
 
   return (
     <div className="rounded-xl border border-stone-200 bg-white p-4">

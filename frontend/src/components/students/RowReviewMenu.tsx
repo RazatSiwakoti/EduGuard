@@ -5,7 +5,7 @@ import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { MoreVertical } from "lucide-react";
 import type { DashboardStudent, DashboardUnitCriterion, RiskTier } from "../../types/dashboard";
 import { BUCKET_LABELS } from "../../utils/dashboardAggregations";
-import { BUCKET_STYLES } from "../dashboard/chartTheme";
+import { useBucketStyles } from "../dashboard/chartTheme";
 import { useDeleteStudent, useSubmitRowReview } from "../../hooks/useStudentDetail";
 import EditStudentDialog from "./EditStudentDialog";
 
@@ -18,6 +18,7 @@ interface Props {
 const tiers: RiskTier[] = ["safe", "low_risk", "high_risk"];
 
 export default function RowReviewMenu({ student, unitCode, criteria = [] }: Props) {
+  const bucketStyles = useBucketStyles();
   const [reviewTier, setReviewTier] = useState<RiskTier | null>(null);
   const [comment, setComment] = useState("");
   const [editOpen, setEditOpen] = useState(false);
@@ -58,7 +59,7 @@ export default function RowReviewMenu({ student, unitCode, criteria = [] }: Prop
           <DropdownMenu.Content align="end" className="z-50 min-w-44 rounded-md border border-stone-200 bg-white p-1 shadow-lg">
             {tiers.map((tier) => (
               <DropdownMenu.Item key={tier} onSelect={() => setReviewTier(tier)} className="flex cursor-pointer items-center gap-2 rounded px-3 py-2 text-sm outline-none hover:bg-stone-100">
-                <span className={`h-2 w-2 rounded-full ${BUCKET_STYLES[tier].dot}`} />
+                <span className={`h-2 w-2 rounded-full ${bucketStyles[tier].dot}`} />
                 Mark as {BUCKET_LABELS[tier]}
               </DropdownMenu.Item>
             ))}
@@ -76,7 +77,7 @@ export default function RowReviewMenu({ student, unitCode, criteria = [] }: Prop
             <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-md bg-white p-6 shadow-lg">
               <Dialog.Title className="text-base font-semibold">Review {student.name}</Dialog.Title>
               <p className="mt-1 text-sm text-stone-500">{unitCode}</p>
-              <span className={`mt-3 inline-flex rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset ${BUCKET_STYLES[reviewTier].pill}`}>
+              <span className={`mt-3 inline-flex rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset ${bucketStyles[reviewTier].pill}`}>
                 {BUCKET_LABELS[reviewTier]}
               </span>
               <form onSubmit={saveReview} className="mt-4 space-y-3">

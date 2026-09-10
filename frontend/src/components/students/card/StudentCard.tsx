@@ -31,7 +31,7 @@ import {
 } from "../../../hooks/useStudentDetail";
 import type { RiskTier } from "../../../types/dashboard";
 import { BUCKET_ICONS } from "../../dashboard/BucketBadge";
-import { BUCKET_STYLES } from "../../dashboard/chartTheme";
+import { useBucketStyles } from "../../dashboard/chartTheme";
 import AttendanceStrip from "./AttendanceStrip";
 import EnginePanels from "./EnginePanels";
 import LecturerNotes from "./LecturerNotes";
@@ -103,6 +103,7 @@ export default function StudentCard({
   onClose,
   checkpointWeek = 8,
 }: StudentCardProps) {
+  const bucketStyles = useBucketStyles();
   const { data, isLoading, isError, error } = useStudentDetail(target, checkpointWeek);
   const saveNote = useSaveStudentNote(target, checkpointWeek);
   const submitReview = useSubmitReview(target, checkpointWeek);
@@ -257,7 +258,7 @@ export default function StudentCard({
             <div className="flex min-w-0 items-center gap-3">
               <span
                 className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-sm font-semibold ring-1 ring-inset ${
-                  bucket ? BUCKET_STYLES[bucket].pill : "bg-stone-100 text-stone-600"
+                  bucket ? bucketStyles[bucket].pill : "bg-stone-100 text-stone-600"
                 }`}
                 aria-hidden="true"
               >
@@ -278,7 +279,7 @@ export default function StudentCard({
                 <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-stone-500">
                   {bucket && (
                     <span
-                      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-medium uppercase tracking-wide ring-1 ring-inset ${BUCKET_STYLES[bucket].pill}`}
+                      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-medium uppercase tracking-wide ring-1 ring-inset ${bucketStyles[bucket].pill}`}
                     >
                       {(() => {
                         const Icon = BUCKET_ICONS[bucket];

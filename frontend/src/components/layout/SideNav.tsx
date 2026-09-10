@@ -144,7 +144,7 @@ export default function SideNav() {
       {/* Brand. Lives here rather than in the header now that a sidebar
           exists — the top-left corner is where a product name belongs,
           and it frees the header for page-level context. */}
-      <div className="flex h-[57px] items-center gap-2.5 border-b border-stone-200 px-4">
+      <div className="flex min-h-[3.5rem] items-center gap-2.5 border-b border-stone-200 px-4 py-3">
         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-blue-600 to-green-500">
           <ShieldCheck className="h-4.5 w-4.5 text-white" strokeWidth={2.5} />
         </div>

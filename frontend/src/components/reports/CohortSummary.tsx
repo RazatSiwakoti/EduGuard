@@ -1,5 +1,5 @@
 import type { ReportBucketCount } from "../../types/reports";
-import { BUCKET_STYLES } from "../dashboard/chartTheme";
+import { useBucketStyles } from "../dashboard/chartTheme";
 
 interface CohortSummaryProps {
   enrolled: number;
@@ -45,6 +45,7 @@ export default function CohortSummary({
   atRiskCount,
   distribution,
 }: CohortSummaryProps) {
+  const bucketStyles = useBucketStyles();
   // Tiers with nobody in them are dropped from the BAR (a zero-width
   // segment is invisible anyway) but kept in the TABLE below, where
   // "High Risk — 0" is a real and reassuring statement.
@@ -91,7 +92,7 @@ export default function CohortSummary({
                   className="h-full"
                   style={{
                     width: `${row.percent_of_analysed}%`,
-                    backgroundColor: BUCKET_STYLES[row.bucket].fill,
+                    backgroundColor: bucketStyles[row.bucket].fill,
                   }}
                   title={`${row.label}: ${row.count} (${row.percent_of_analysed}%)`}
                 />
@@ -109,7 +110,7 @@ export default function CohortSummary({
                         carries its label and its count in text. */}
                     <span
                       className="h-2.5 w-2.5 shrink-0 rounded-sm"
-                      style={{ backgroundColor: BUCKET_STYLES[row.bucket].fill }}
+                      style={{ backgroundColor: bucketStyles[row.bucket].fill }}
                       aria-hidden="true"
                     />
                     <span

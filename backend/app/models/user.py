@@ -53,6 +53,7 @@ class User(Base):
         onupdate=func.now(),
     )
     last_login = Column(DateTime(timezone=True), nullable=True)
+    notifications_seen_at = Column(DateTime(timezone=True), nullable=True)
 
     # relationships
     #foreign keys is required since Unit gained `criteria_unlocked_by (section T1) - Unit now has TWO foreign keys to users.id, and

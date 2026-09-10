@@ -1,7 +1,7 @@
 import type { RiskBucket } from "../../types/dashboard";
 import { BUCKET_LABELS, BUCKET_ORDER } from "../../utils/dashboardAggregations";
 import { BUCKET_ICONS } from "../dashboard/BucketBadge";
-import { BUCKET_STYLES } from "../dashboard/chartTheme";
+import { useBucketStyles } from "../dashboard/chartTheme";
 
 interface RiskTabsProps {
   /** Counts per bucket for the currently selected subject. */
@@ -35,6 +35,8 @@ interface RiskTabsProps {
  * the filter is identifiable without relying on its colour.
  */
 export default function RiskTabs({ counts, total, active, onChange }: RiskTabsProps) {
+  const bucketStyles = useBucketStyles();
+
   return (
     <div
       role="tablist"
@@ -73,7 +75,7 @@ export default function RiskTabs({ counts, total, active, onChange }: RiskTabsPr
             role="tab"
             aria-selected={isActive}
             onClick={() => onChange(bucket)}
-            title={BUCKET_STYLES[bucket].hint}
+            title={bucketStyles[bucket].hint}
             className={`flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition ${
               isActive
                 ? "bg-stone-900 text-white"

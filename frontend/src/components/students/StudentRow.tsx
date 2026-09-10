@@ -7,7 +7,7 @@ import {
   tutorialOf,
 } from "../../utils/studentsTable";
 import BucketBadge from "../dashboard/BucketBadge";
-import { BUCKET_STYLES } from "../dashboard/chartTheme";
+import { useBucketStyles } from "../dashboard/chartTheme";
 import AssessmentCell from "./AssessmentCell";
 import MetricCell from "./MetricCell";
 import TrendCell from "./TrendCell";
@@ -49,6 +49,7 @@ export default function StudentRow({
   onSelect,
   showTutorial,
 }: StudentRowProps) {
+  const bucketStyles = useBucketStyles();
   const bucket = getBucket(student);
   const attendance = attendanceOf(student);
   const tutorial = tutorialOf(student);
@@ -61,7 +62,7 @@ export default function StudentRow({
       <td className="px-4 py-3">
         <div className="flex items-center gap-3">
           <span
-            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold ring-1 ring-inset ${BUCKET_STYLES[bucket].pill}`}
+            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold ring-1 ring-inset ${bucketStyles[bucket].pill}`}
             aria-hidden="true"
           >
             {initialsOf(student.name)}

@@ -1,7 +1,7 @@
 import { BookOpen, CircleDashed, OctagonAlert, Scale, Users } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { DashboardKpis } from "../../utils/dashboardAggregations";
-import { BUCKET_STYLES } from "./chartTheme";
+import { useBucketStyles } from "./chartTheme";
 
 interface TileProps {
   label: string;
@@ -81,6 +81,8 @@ export default function KpiTiles({
   onSelectNeedsReview,
   activeBucket,
 }: KpiTilesProps) {
+  const bucketStyles = useBucketStyles();
+
   return (
     <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
       <Tile
@@ -95,7 +97,7 @@ export default function KpiTiles({
         value={kpis.highRisk}
         hint="Click to filter the whole dashboard to these students"
         icon={OctagonAlert}
-        accent={BUCKET_STYLES.high_risk.fill}
+        accent={bucketStyles.high_risk.fill}
         onClick={onSelectHighRisk}
         isActive={activeBucket === "high_risk"}
       />
@@ -105,7 +107,7 @@ export default function KpiTiles({
         value={kpis.needsReview}
         hint="The rule engine and ML model disagreed — you decide the tier"
         icon={Scale}
-        accent={BUCKET_STYLES.needs_review.fill}
+        accent={bucketStyles.needs_review.fill}
         onClick={onSelectNeedsReview}
         isActive={activeBucket === "needs_review"}
       />
@@ -118,7 +120,7 @@ export default function KpiTiles({
           value={kpis.notAnalysed}
           hint="Enrolled students with no verdict — run the analysis for their unit"
           icon={CircleDashed}
-          accent={BUCKET_STYLES.not_analysed.fill}
+          accent={bucketStyles.not_analysed.fill}
         />
       ) : (
         <Tile

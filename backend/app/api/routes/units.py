@@ -10,7 +10,7 @@ go through app.services.unit_service - never duplicated inline here -
 so those invariants only exist in one place.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -18,10 +18,10 @@ from app.models.user import User
 from app.models.unit import Unit
 from app.models.enums import UserRole
 from app.schemas.unit import UnitCreate, UnitUpdate, UnitAssignLecturer, UnitOut
-from app.core.dependencies import require_role
+from app.core.dependencies import get_current_user, require_role
 from app.core.teaching import TEACHING_ROLES
 from app.core.system_accounts import PLACEHOLDER_USER_EMAIL
-from app.services import class_code as class_code_rules, unit_service
+from app.services import audit_service, class_code as class_code_rules, unit_service
 
 router = APIRouter(
     prefix="/admin/units",
@@ -224,11 +224,32 @@ def update_unit(unit_id: int, payload: UnitUpdate, db: Session = Depends(get_db)
 # ASSIGN LECTURER (overwrites directly)
 # -------------------------
 @router.patch("/{unit_id}/assign-lecturer", response_model=UnitOut)
-def assign_lecturer_to_unit(unit_id: int, payload: UnitAssignLecturer, db: Session = Depends(get_db)):
+def assign_lecturer_to_unit(
+    unit_id: int,
+    payload: UnitAssignLecturer,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     unit = _get_unit_or_404(db, unit_id)
-    _get_assignable_teacher_or_404(db, payload.lecturer_id)
+    teacher = _get_assignable_teacher_or_404(db, payload.lecturer_id)
+    previous_lecturer_id = unit.lecturer_id
 
     unit_service.assign_lecturer(db, unit, payload.lecturer_id)
+    audit_service.record(
+        db,
+        action=audit_service.UNIT_ASSIGNED,
+        actor=current_user,
+        unit=unit,
+        entity_type="unit",
+        entity_id=unit.id,
+        summary=(
+            f"Assigned {unit.full_code} to {teacher.full_name}."
+        ),
+        before={"lecturer_id": previous_lecturer_id},
+        after={"lecturer_id": payload.lecturer_id},
+        request=request,
+    )
     db.commit()
     db.refresh(unit)
     return unit
@@ -238,10 +259,28 @@ def assign_lecturer_to_unit(unit_id: int, payload: UnitAssignLecturer, db: Sessi
 # UNASSIGN LECTURER
 # -------------------------
 @router.patch("/{unit_id}/unassign-lecturer", response_model=UnitOut)
-def unassign_lecturer_from_unit(unit_id: int, db: Session = Depends(get_db)):
+def unassign_lecturer_from_unit(
+    unit_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     unit = _get_unit_or_404(db, unit_id)
+    previous_lecturer_id = unit.lecturer_id
 
     unit_service.unassign_lecturer(db, unit)
+    audit_service.record(
+        db,
+        action=audit_service.UNIT_ASSIGNED,
+        actor=current_user,
+        unit=unit,
+        entity_type="unit",
+        entity_id=unit.id,
+        summary=f"Unassigned {unit.full_code} from its lecturer.",
+        before={"lecturer_id": previous_lecturer_id},
+        after={"lecturer_id": None},
+        request=request,
+    )
     db.commit()
     db.refresh(unit)
     return unit

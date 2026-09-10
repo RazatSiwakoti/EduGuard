@@ -8,7 +8,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import type { RiskBucket } from "../../types/dashboard";
 import { BUCKET_LABELS } from "../../utils/dashboardAggregations";
-import { BUCKET_STYLES } from "./chartTheme";
+import { useBucketStyles } from "./chartTheme";
 
 /**
  * Icon per risk bucket.
@@ -36,10 +36,11 @@ interface BucketBadgeProps {
 }
 
 export default function BucketBadge({ bucket, isMissingData = false, iconOnly = false }: BucketBadgeProps) {
+  const bucketStyles = useBucketStyles();
   const Icon = BUCKET_ICONS[bucket];
   const style = isMissingData && bucket === "needs_review"
-    ? BUCKET_STYLES.needs_review
-    : BUCKET_STYLES[bucket];
+    ? bucketStyles.needs_review
+    : bucketStyles[bucket];
   const label = isMissingData && bucket === "needs_review" ? "Missing data" : BUCKET_LABELS[bucket];
 
   return (

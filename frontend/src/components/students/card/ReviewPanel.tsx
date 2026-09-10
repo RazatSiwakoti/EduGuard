@@ -11,7 +11,7 @@ import type { RiskTier } from "../../../types/dashboard";
 import type { StudentDetailResponse } from "../../../types/studentDetail";
 import { BUCKET_LABELS, TIER_ORDER } from "../../../utils/dashboardAggregations";
 import { formatDateTime } from "../../../utils/studentCard";
-import { BUCKET_STYLES } from "../../dashboard/chartTheme";
+import { useBucketStyles } from "../../dashboard/chartTheme";
 
 interface ReviewPanelProps {
   detail: StudentDetailResponse;
@@ -52,6 +52,7 @@ export default function ReviewPanel({
   isError,
   error,
 }: ReviewPanelProps) {
+  const bucketStyles = useBucketStyles();
   const [decision, setDecision] = useState<RiskTier | null>(null);
   const [comment, setComment] = useState("");
 
@@ -95,7 +96,7 @@ export default function ReviewPanel({
               {applied.reviewer_name ?? "A lecturer"} resolved this as
             </span>
             <span
-              className={`rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${BUCKET_STYLES[applied.decision].pill}`}
+              className={`rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${bucketStyles[applied.decision].pill}`}
             >
               {BUCKET_LABELS[applied.decision]}
             </span>
@@ -181,7 +182,7 @@ export default function ReviewPanel({
                   className={`rounded-xl px-4 py-2 text-sm font-medium ring-1 ring-inset transition ${
                     selected
                       ? "bg-stone-900 text-white ring-stone-900"
-                      : `${BUCKET_STYLES[tier].pill} hover:brightness-95`
+                      : `${bucketStyles[tier].pill} hover:brightness-95`
                   }`}
                 >
                   {BUCKET_LABELS[tier]}
@@ -251,7 +252,7 @@ export default function ReviewPanel({
               <li key={entry.id} className="px-4 py-2.5 text-xs">
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                   <span
-                    className={`rounded-full px-1.5 py-0.5 font-medium ring-1 ring-inset ${BUCKET_STYLES[entry.decision].pill}`}
+                    className={`rounded-full px-1.5 py-0.5 font-medium ring-1 ring-inset ${bucketStyles[entry.decision].pill}`}
                   >
                     {BUCKET_LABELS[entry.decision]}
                   </span>

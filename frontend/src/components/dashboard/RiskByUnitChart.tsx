@@ -11,7 +11,7 @@ import type { UnitRiskRow } from "../../utils/dashboardAggregations";
 import { BUCKET_LABELS, BUCKET_ORDER } from "../../utils/dashboardAggregations";
 import BucketBadge from "./BucketBadge";
 import ChartCard from "./ChartCard";
-import { BUCKET_STYLES, MARK_GAP_PX, MARK_RADIUS_PX, useChartInk } from "./chartTheme";
+import { MARK_GAP_PX, MARK_RADIUS_PX, useBucketStyles, useChartInk } from "./chartTheme";
 import { toNumber, toText, tooltipContentStyle } from "./tooltipFormat";
 import { useChartIntroAnimation } from "../../utils/chartAnimation";
 
@@ -43,6 +43,7 @@ export default function RiskByUnitChart({ rows, onSelectUnit }: RiskByUnitChartP
   // than Recharts' own isAnimationActive, which does nothing at
   // this version.
   const intro = useChartIntroAnimation();
+  const bucketStyles = useBucketStyles();
   const ink = useChartInk();
 
   const hasData = rows.some((row) => row.total > 0);
@@ -117,7 +118,7 @@ export default function RiskByUnitChart({ rows, onSelectUnit }: RiskByUnitChartP
               dataKey={bucket}
               name={BUCKET_LABELS[bucket]}
               stackId="risk"
-              fill={BUCKET_STYLES[bucket].fill}
+              fill={bucketStyles[bucket].fill}
               // A surface-coloured stroke is how a real gap between
               // stacked segments is achieved in Recharts — without it
               // adjacent fills touch and the boundary disappears.

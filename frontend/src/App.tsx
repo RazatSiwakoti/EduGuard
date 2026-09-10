@@ -8,6 +8,7 @@ import SuperAdminDashboard from "./pages/SuperAdminDashboard";
 import AdminDashboard from "./pages/AdminDashboard";
 import AccountPage from "./pages/AccountPage";
 import SettingsPage from "./pages/SettingsPage";
+import NotificationsPage from "./pages/NotificationsPage";
 import ProtectedRoute from "./components/ProtectedRoute";
 import RoleRoute from "./components/RoleRoute";
 import UnitsPage from "./pages/UnitsPage";
@@ -43,6 +44,7 @@ function App() {
         {/* Available to every signed-in role. */}
         <Route path="/account" element={<AccountPage />} />
         <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/notifications" element={<NotificationsPage />} />
 
         {/* Lecturer workspace — GATED since T5.
             It used to be ungated: any signed-in account could type

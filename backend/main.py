@@ -19,7 +19,6 @@ from app.api.routes.admin import router as admin_router
 from app.api.routes.units import router as units_router
 from app.api.routes.ingestion import router as ingestion_router
 from app.api.routes.criteria import router as criteria_router
-from app.api.routes.alerts import router as alerts_router
 from app.scheduler import start_scheduler, shutdown_scheduler
 from fastapi.middleware.cors import CORSMiddleware
 from app.models.verdict_review import VerdictReview
@@ -29,6 +28,7 @@ from app.api.routes.analysis import router as analysis_router
 from app.api.routes.admin_criteria import router as admin_criteria_router
 from app.api.routes.acknowledge import router as acknowledge_router
 from app.api.routes.audit import router as audit_router
+from app.api.routes.notifications import router as notifications_router
 
 
 
@@ -66,7 +66,7 @@ app.include_router(analysis_router)
 app.include_router(admin_criteria_router)
 app.include_router(acknowledge_router)
 app.include_router(audit_router)
-
+app.include_router(notifications_router)
 
 @app.on_event("startup")
 def _start_background_jobs() -> None:

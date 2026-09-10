@@ -11,6 +11,22 @@
 @import "tailwindcss";
 @custom-variant dark (&:where(.dark, .dark *));
 
+html {
+  font-size: 16px;
+}
+
+html[data-font-size="small"] {
+  font-size: 14px;
+}
+
+html[data-font-size="large"] {
+  font-size: 18px;
+}
+
+html[data-font-size="larger"] {
+  font-size: 20px;
+}
+
 /* ------------------------------------------------------------------
    Design tokens, from the Figma design.
    ADDED ALONGSIDE Tailwind's stone scale, never replacing it. The
@@ -131,3 +147,38 @@ body {
     to   { opacity: 1; }
   }
 } 
+
+/* The OS preference is honoured unconditionally above. This class is
+   the in-app toggle for someone whose OS setting is off but who wants a
+   still interface here - so it adds to that rule, never replaces it. */
+.reduce-motion *,
+.reduce-motion *::before,
+.reduce-motion *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+
+/* High contrast lets the border carry separation instead of relying on
+   the subtle shadow and hairline used by the normal theme. */
+.hc {
+  --color-hairline: rgba(17, 24, 39, 0.55);
+  --color-stone-400: #57534e;
+  --color-stone-500: #44403c;
+}
+
+.dark.hc {
+  --color-hairline: rgba(255, 255, 255, 0.55);
+  --color-stone-400: #c9c7ce;
+  --color-stone-500: #dcdae1;
+}
+
+.hc .eduguard-page {
+  background-image: none;
+}
+
+.hc *:focus-visible {
+  outline: 3px solid var(--color-brand);
+  outline-offset: 2px;
+}

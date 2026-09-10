@@ -3,7 +3,7 @@ import { Check, ChevronDown, Filter, X } from "lucide-react";
 import type { DashboardFilters, DashboardUnit, RiskBucket } from "../../types/dashboard";
 import { BUCKET_LABELS, BUCKET_ORDER } from "../../utils/dashboardAggregations";
 import { BUCKET_ICONS } from "./BucketBadge";
-import { BUCKET_STYLES } from "./chartTheme";
+import { useBucketStyles } from "./chartTheme";
 
 interface FilterBarProps {
   units: DashboardUnit[];
@@ -36,6 +36,7 @@ export default function FilterBar({
   visibleCount,
   totalCount,
 }: FilterBarProps) {
+  const bucketStyles = useBucketStyles();
   const selectedUnit = units.find((u) => u.id === filters.unitId) ?? null;
   const hasActiveFilter = filters.unitId !== null || filters.bucket !== null;
 
@@ -159,10 +160,10 @@ export default function FilterBar({
                 onChange({ ...filters, bucket: isActive ? null : bucket })
               }
               aria-pressed={isActive}
-              title={BUCKET_STYLES[bucket].hint}
+              title={bucketStyles[bucket].hint}
               className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset transition ${
                 isActive
-                  ? BUCKET_STYLES[bucket].pill
+                  ? bucketStyles[bucket].pill
                   : "text-stone-500 ring-stone-200 hover:bg-stone-50"
               }`}
             >
@@ -171,7 +172,7 @@ export default function FilterBar({
                 aria-hidden="true"
                 // The icon keeps its tier colour even when the chip is
                 // inactive, so the legend mapping stays learnable.
-                style={isActive ? undefined : { color: BUCKET_STYLES[bucket].fill }}
+                style={isActive ? undefined : { color: bucketStyles[bucket].fill }}
               />
               {BUCKET_LABELS[bucket]}
             </button>

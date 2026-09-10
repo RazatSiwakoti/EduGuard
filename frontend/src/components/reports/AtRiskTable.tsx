@@ -2,7 +2,7 @@ import { useState } from "react";
 import { CircleAlert, Mail, MailX, TrendingDown, UserCheck } from "lucide-react";
 import type { RiskBucket } from "../../types/dashboard";
 import type { ReportStudentRow } from "../../types/reports";
-import { BUCKET_STYLES } from "../dashboard/chartTheme";
+import { useBucketStyles } from "../dashboard/chartTheme";
 import { BUCKET_LABELS } from "../../utils/dashboardAggregations";
 import { formatDateTime } from "../../utils/studentCard";
 
@@ -84,6 +84,7 @@ function Figure({
  * would be a second implementation of the same rule.
  */
 export default function AtRiskTable({ rows, alertsAvailable }: AtRiskTableProps) {
+  const bucketStyles = useBucketStyles();
   /**
    * A DISPLAY filter, and nothing more.
    *
@@ -155,7 +156,7 @@ export default function AtRiskTable({ rows, alertsAvailable }: AtRiskTableProps)
                   className={`rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset transition ${
                     off
                       ? "bg-white text-stone-400 ring-stone-200 hover:text-stone-600"
-                      : BUCKET_STYLES[tier].pill
+                      : bucketStyles[tier].pill
                   }`}
                 >
                   {BUCKET_LABELS[tier]}
@@ -242,7 +243,7 @@ export default function AtRiskTable({ rows, alertsAvailable }: AtRiskTableProps)
                       <div className="flex items-start gap-2">
                         <span
                           className="mt-1.5 h-2 w-2 shrink-0 rounded-full"
-                          style={{ backgroundColor: BUCKET_STYLES[bucket].fill }}
+                          style={{ backgroundColor: bucketStyles[bucket].fill }}
                           aria-hidden="true"
                         />
                         <div className="min-w-0">
@@ -300,7 +301,7 @@ export default function AtRiskTable({ rows, alertsAvailable }: AtRiskTableProps)
 
                     <td className="px-5 py-3">
                       <span
-                        className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${BUCKET_STYLES[bucket].pill}`}
+                        className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${bucketStyles[bucket].pill}`}
                       >
                         {row.risk_label}
                       </span>

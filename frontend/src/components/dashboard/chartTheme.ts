@@ -134,6 +134,44 @@ export const BUCKET_STYLES: Record<RiskBucket, BucketStyle> = {
   },
 };
 
+export const BUCKET_STYLES_CVD: Record<RiskBucket, BucketStyle> = {
+  high_risk: {
+    fill: "#d55e00",
+    pill: "bg-orange-50 text-orange-800 ring-orange-300",
+    hint: "Both engines agree this student is at high risk",
+    dot: "bg-orange-600",
+  },
+  low_risk: {
+    fill: "#e69f00",
+    pill: "bg-amber-50 text-amber-800 ring-amber-300",
+    hint: "Showing early warning signs, worth monitoring",
+    dot: "bg-amber-600",
+  },
+  safe: {
+    fill: "#0072b2",
+    pill: "bg-sky-50 text-sky-800 ring-sky-300",
+    hint: "Tracking well against every criterion",
+    dot: "bg-sky-700",
+  },
+  needs_review: {
+    fill: "#785ef0",
+    pill: "bg-violet-50 text-violet-700 ring-violet-200",
+    hint: "Rule engine and ML model disagreed - awaiting your decision",
+    dot: "bg-violet-500",
+  },
+  not_analysed: {
+    fill: "#898781",
+    pill: "bg-stone-100 text-stone-600 ring-stone-200",
+    hint: "Enrolled, but the analysis has never been run for this student",
+    dot: "bg-stone-400",
+  },
+};
+
+export function useBucketStyles(): Record<RiskBucket, BucketStyle> {
+  const { preferences } = useAppearance();
+  return preferences.colourblind_safe ? BUCKET_STYLES_CVD : BUCKET_STYLES;
+}
+
 /** Engine tiers reuse the identical three status colours. */
 export const TIER_FILLS: Record<RiskTier, string> = {
   high_risk: BUCKET_STYLES.high_risk.fill,

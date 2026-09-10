@@ -2,6 +2,7 @@
 
 from datetime import date, datetime, time, timezone
 
+
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
@@ -59,7 +60,15 @@ def build_feed(db: Session, user: User, limit: int) -> list[NotificationItem]:
         items.extend(_unconfigured_units(db))
         items.extend(_overrides(db, user))
 
-    items.sort(key=lambda item: item.occurred_at, reverse=True)
+    
+    items.sort(
+    key=lambda item: (
+        item.occurred_at.replace(tzinfo=timezone.utc)
+        if item.occurred_at.tzinfo is None
+        else item.occurred_at
+    ),
+    reverse=True,
+)
     seen_at = user.notifications_seen_at
     for item in items:
         item.unread = _is_unread(item.occurred_at, seen_at)

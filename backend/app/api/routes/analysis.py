@@ -38,6 +38,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.core.checkpoints import resolve_checkpoint
 from app.core.dependencies import require_teaching_role
 from app.database import get_db
 from app.models.enrollment import Enrollment
@@ -162,7 +163,7 @@ def run_analysis(
             ),
         )
 
-    week = checkpoint_week or _default_week()
+    week = resolve_checkpoint(checkpoint_week)
     units = _owned_units(db, current_user.id, unit_id)
 
     if not units:
@@ -231,6 +232,7 @@ def run_analysis(
 @router.get("/preview", response_model=list[UnitAnalysisResult])
 def preview_analysis_scope(
     unit_id: Optional[int] = Query(None, ge=1),
+    checkpoint_week: Optional[int] = Query(None, ge=1, le=52),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_teaching_role()),
 ) -> list[UnitAnalysisResult]:
@@ -241,7 +243,7 @@ def preview_analysis_scope(
     should be told how many students and how many standing review
     decisions are at stake before they press the button, not after.
     """
-    week = _default_week()
+    week = resolve_checkpoint(checkpoint_week)
     units = _owned_units(db, current_user.id, unit_id)
 
     if not units:

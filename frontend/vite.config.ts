@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite'
+import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import babel from '@rolldown/plugin-babel'
 import tailwindcss from '@tailwindcss/vite'
@@ -13,4 +13,9 @@ export default defineConfig({
     babel({ plugins: ['babel-plugin-react-compiler'] }),
     tailwindcss(),
   ],
+  test: {
+    environment: 'jsdom',
+    globals: false,
+    include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+  },
 })

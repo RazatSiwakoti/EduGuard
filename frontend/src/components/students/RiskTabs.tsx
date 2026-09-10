@@ -11,6 +11,9 @@ interface RiskTabsProps {
   /** `null` = All students. */
   active: RiskBucket | null;
   onChange: (bucket: RiskBucket | null) => void;
+  watchingCount: number;
+  watchingActive: boolean;
+  onWatchingChange: () => void;
 }
 
 /**
@@ -34,7 +37,7 @@ interface RiskTabsProps {
  * semantics come for free, and each tab carries its bucket's icon so
  * the filter is identifiable without relying on its colour.
  */
-export default function RiskTabs({ counts, total, active, onChange }: RiskTabsProps) {
+export default function RiskTabs({ counts, total, active, onChange, watchingCount, watchingActive, onWatchingChange }: RiskTabsProps) {
   const bucketStyles = useBucketStyles();
 
   return (
@@ -62,6 +65,11 @@ export default function RiskTabs({ counts, total, active, onChange }: RiskTabsPr
         >
           {total}
         </span>
+      </button>
+      <button type="button" role="tab" aria-selected={watchingActive} onClick={onWatchingChange}
+        className={`flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition ${watchingActive ? "bg-stone-900 text-white" : "text-stone-600 hover:bg-stone-50 hover:text-stone-900"}`}>
+        ★ Watching
+        <span className={`rounded-full px-1.5 py-0.5 text-xs tabular-nums ${watchingActive ? "bg-white/20 text-white" : "bg-stone-100 text-stone-600"}`}>{watchingCount}</span>
       </button>
 
       {BUCKET_ORDER.map((bucket) => {

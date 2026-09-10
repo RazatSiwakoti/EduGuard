@@ -15,6 +15,8 @@ interface ReportToolbarProps {
   downloading: boolean;
   /** Disabled while there is no report to print. */
   canDownload: boolean;
+  anonymise: boolean;
+  onAnonymiseChange: (value: boolean) => void;
 }
 
 /**
@@ -41,6 +43,8 @@ export default function ReportToolbar({
   onDownload,
   downloading,
   canDownload,
+  anonymise,
+  onAnonymiseChange,
 }: ReportToolbarProps) {
   const selectClass =
     "rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900 focus:border-stone-400 focus:outline-none focus:ring-1 focus:ring-stone-400";
@@ -78,6 +82,10 @@ export default function ReportToolbar({
           </select>
         </label>
       )}
+      <label className="flex items-center gap-2 text-sm text-stone-600" title="For sharing outside the teaching team.">
+        <input type="checkbox" checked={anonymise} onChange={(event) => onAnonymiseChange(event.target.checked)} />
+        Remove identifying details
+      </label>
 
       <button
         type="button"

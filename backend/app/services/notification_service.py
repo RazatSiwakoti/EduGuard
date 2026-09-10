@@ -1,6 +1,6 @@
 """Build the derived notification feed from existing EduGuard records."""
 
-from datetime import datetime, timezone
+from datetime import date, datetime, time, timezone
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
@@ -12,6 +12,7 @@ from app.models.email_message import EmailMessage
 from app.models.enums import CriteriaCategory, UserRole
 from app.models.final_verdicts import FinalVerdict
 from app.models.ingestion_batch import IngestionBatch
+from app.models.intervention import Intervention
 from app.models.student import Student
 from app.models.unit import Unit
 from app.models.user import User
@@ -35,6 +36,7 @@ NOTIFICATION_KIND_LABELS = {
     "verdict_overridden": "Verdict overrides",
     "unit_unassigned": "Unassigned units",
     "unit_unconfigured": "Unconfigured units",
+    "follow_up_due": "Follow-ups due",
 }
 
 
@@ -50,6 +52,7 @@ def build_feed(db: Session, user: User, limit: int) -> list[NotificationItem]:
         items.extend(_missing_data(db, user))
         items.extend(_imports(db, user))
         items.extend(_criteria_changes(db, user))
+        items.extend(_follow_ups_due(db, user))
 
     if user.role in (UserRole.ADMIN, UserRole.SUPER_ADMIN):
         items.extend(_unassigned_units(db))
@@ -258,6 +261,35 @@ def _criteria_changes(db: Session, user: User) -> list[NotificationItem]:
         )
         for event in rows
         if event.action in ACTION_LABELS
+    ]
+
+
+def _follow_ups_due(db: Session, user: User) -> list[NotificationItem]:
+    rows = db.execute(
+        select(Intervention, Student.name, Unit)
+        .join(Student, Student.id == Intervention.student_id)
+        .join(Unit, Unit.id == Intervention.unit_id)
+        .where(
+            Intervention.lecturer_id == user.id,
+            Intervention.follow_up_on <= date.today(),
+        )
+        .order_by(Intervention.follow_up_on.asc(), Intervention.id.asc())
+        .limit(20)
+    ).all()
+    return [
+        NotificationItem(
+            id=f"follow-up:{intervention.id}",
+            kind="follow_up_due",
+            severity="warning",
+            title=f"Follow-up due for {student_name}",
+            detail=f"{unit.full_code} · {intervention.kind}",
+            occurred_at=datetime.combine(
+                intervention.follow_up_on, time.min, tzinfo=timezone.utc
+            ),
+            link=f"/students?student={intervention.student_id}&cardUnit={intervention.unit_id}",
+            unread=False,
+        )
+        for intervention, student_name, unit in rows
     ]
 
 

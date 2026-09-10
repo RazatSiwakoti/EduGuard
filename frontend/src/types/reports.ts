@@ -116,6 +116,10 @@ export interface ReportInterventionSummary {
 
   reviews_resolved: number;
   reviews_pending: number;
+  interventions_total: number;
+  interventions_by_kind: Record<string, number>;
+  interventions_by_outcome: Record<string, number>;
+  median_contact_minutes: number | null;
 }
 
 export interface ReportCheckpoint {

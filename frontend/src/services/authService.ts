@@ -16,6 +16,17 @@ export async function login(
   return response.data;
 }
 
+export async function requestPasswordReset(email: string): Promise<void> {
+  await api.post("/auth/password-reset/request", { email });
+}
+
+export async function confirmPasswordReset(
+  token: string,
+  new_password: string
+): Promise<void> {
+  await api.post("/auth/password-reset/confirm", { token, new_password });
+}
+
 // Calls GET /auth/me. Relies on the axios interceptor in api.ts to attach
 // the JWT automatically — this function doesn't handle tokens directly.
 export async function getCurrentUser(): Promise<User> {

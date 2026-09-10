@@ -6,7 +6,7 @@ import re
 from io import BytesIO
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from PIL import Image, UnidentifiedImageError
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
@@ -27,6 +27,10 @@ from app.core.security import hash_password, verify_password
 from app.core.auth import create_access_token
 from app.core.dependencies import get_current_user
 from app.core.teaching import holds_active_unit
+from app.models.login_attempt import LoginAttempt
+from app.services.audit_service import client_ip
+from sqlalchemy import func
+from datetime import timedelta
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 _AVATAR_PREFIX = re.compile(r"^data:image/(png|jpeg|webp);base64,")
@@ -38,25 +42,53 @@ _MAX_AVATAR_DIMENSION = 512
 # LOGIN ENDPOINT
 # -------------------------
 @router.post("/login", response_model=TokenResponse)
-def login(credentials: LoginRequest, db: Session = Depends(get_db)):
-
+def login(credentials: LoginRequest, request: Request, db: Session = Depends(get_db)):
+    now = datetime.now(timezone.utc)
+    since = now - timedelta(minutes=15)
+    email = str(credentials.email).strip().lower()
+    ip = client_ip(request)
+    email_failures = db.query(func.count(LoginAttempt.id)).filter(
+        LoginAttempt.succeeded.is_(False),
+        LoginAttempt.attempted_at >= since,
+        LoginAttempt.email == email,
+    ).scalar() or 0
+    ip_failures = db.query(func.count(LoginAttempt.id)).filter(
+        LoginAttempt.succeeded.is_(False),
+        LoginAttempt.attempted_at >= since,
+        LoginAttempt.ip == ip,
+    ).scalar() or 0
     user = db.query(User).filter(User.email == credentials.email).first()
-# Generic error for unknown email OR wrong password - checked together so a wrong password never confirms whether an email
-# exists in the system (account enumeration protection).
-    if not user or not verify_password(credentials.password, user.hashed_password):
+    # Always perform bcrypt work, including for locked/unknown accounts, to
+    # keep lockout timing comparable with an ordinary failed login.
+    valid_password = verify_password(
+        credentials.password,
+        user.hashed_password if user else "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy",
+    )
+    locked = email_failures >= 5 or ip_failures >= 5
+    attempt = LoginAttempt(email=email, ip=ip, succeeded=False, attempted_at=now)
+    db.add(attempt)
+    if locked:
+        db.commit()
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password",
+            status_code=status.HTTP_423_LOCKED,
+            detail="Too many failed login attempts. Try again later.",
+            headers={"Retry-After": "900"},
         )
+    # Generic error for unknown email OR wrong password.
+    if not user or not valid_password:
+        db.commit()
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect email or password")
 
     # Only reached once the password is already proven correct, so this distinct message doesn't leak account status to a guesser.
     if not user.is_active:
+        db.commit()
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Account is deactivated. Contact your administrator.",
         )
     
-    user.last_login = datetime.now(timezone.utc)
+    attempt.succeeded = True
+    user.last_login = now
     db.commit()
     db.refresh(user)
 
@@ -139,6 +171,7 @@ def change_password(
         )
 
     current_user.hashed_password = hash_password(payload.new_password)
+    current_user.password_changed_at = datetime.now(timezone.utc)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 

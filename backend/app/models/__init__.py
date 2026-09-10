@@ -12,3 +12,8 @@ from app.models.email_template import EmailTemplate
 from app.models.email_message import EmailMessage
 from app.models.verdict_review import VerdictReview
 from app.models.audit_event import AuditEvent
+from app.models.password_reset import PasswordResetToken
+from app.models.login_attempt import LoginAttempt
+from app.models.student_access import StudentAccessToken
+from app.models.watchlist import Watchlist
+from app.models.intervention import Intervention

@@ -15,7 +15,7 @@ const KEY = ["lecturer-dashboard"];
  * uploads data or explicitly re-runs the analysis — not continuously.
  * Refetching on every window focus would be pure noise.
  */
-export function useLecturerDashboard(checkpointWeek = 8) {
+export function useLecturerDashboard(checkpointWeek?: number) {
   return useQuery({
     queryKey: [...KEY, checkpointWeek],
     queryFn: () => dashboardService.get(checkpointWeek),

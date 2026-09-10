@@ -1,14 +1,6 @@
-export type NotificationKind =
-  | "alert_acknowledged"
-  | "alert_failed"
-  | "sweep_summary"
-  | "review_pending"
-  | "missing_data"
-  | "import_complete"
-  | "criteria_changed"
-  | "verdict_overridden"
-  | "unit_unassigned"
-  | "unit_unconfigured";
+export type NotificationKind = "alert_acknowledged" | "alert_failed" | "sweep_summary" |
+  "review_pending" | "missing_data" | "import_complete" | "criteria_changed" |
+  "verdict_overridden" | "unit_unassigned" | "unit_unconfigured" | "follow_up_due";
 
 export type Severity = "info" | "success" | "warning" | "critical";
 

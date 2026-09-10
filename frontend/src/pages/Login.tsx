@@ -15,7 +15,7 @@ import {
 import loginBg from "../assets/LBG.jpeg";
 import combinedLogo from "../assets/CRr.png";
 import facultyLogo from "../assets/edlogo.png";
-import { login as loginRequest } from "../services/authService";
+import { login as loginRequest, requestPasswordReset } from "../services/authService";
 import { useAuth } from "../context/AuthContext";
 import { getRedirectPath } from "../utils/getRedirectPath";
 
@@ -38,6 +38,7 @@ export default function Login() {
   const [showForgot, setShowForgot] = useState(false);
   const [forgotEmail, setForgotEmail] = useState("");
   const [forgotSent, setForgotSent] = useState(false);
+  const [forgotLoading, setForgotLoading] = useState(false);
   const [showRequest, setShowRequest] = useState(false);
   const [requestName, setRequestName] = useState("");
   const [requestEmail, setRequestEmail] = useState("");
@@ -78,6 +79,18 @@ export default function Login() {
     setShowForgot(false);
     setForgotSent(false);
     setForgotEmail("");
+    setForgotLoading(false);
+  }
+
+  async function handleForgotPassword() {
+    if (!forgotEmail || forgotLoading) return;
+    setForgotLoading(true);
+    try {
+      await requestPasswordReset(forgotEmail);
+    } finally {
+      setForgotSent(true);
+      setForgotLoading(false);
+    }
   }
 
   function resetRequestModal() {
@@ -820,7 +833,7 @@ export default function Login() {
                     Check your inbox
                   </h3>
                   <p style={{ color: "#6B7280", fontSize: 13, lineHeight: 1.6, margin: "0 0 20px" }}>
-                    If <strong>{forgotEmail}</strong> is registered, a reset link has been sent by the KOI IT team within 1 business day.
+                    If <strong>{forgotEmail}</strong> is registered, a reset link has been sent.
                   </p>
                   <button
                     onClick={resetForgotModal}
@@ -909,25 +922,23 @@ export default function Login() {
                       Cancel
                     </button>
                     <button
-                      onClick={() => {
-                        if (forgotEmail) setForgotSent(true);
-                      }}
-                      disabled={!forgotEmail}
+                      onClick={handleForgotPassword}
+                      disabled={!forgotEmail || forgotLoading}
                       style={{
                         flex: 2,
                         padding: "11px",
-                        background: forgotEmail
+                        background: forgotEmail && !forgotLoading
                           ? "linear-gradient(135deg,#0B3D73,#185FA5)"
                           : "#E5E7EB",
                         border: "none",
                         borderRadius: 10,
-                        color: forgotEmail ? "#FFFFFF" : "#9CA3AF",
+                        color: forgotEmail && !forgotLoading ? "#FFFFFF" : "#9CA3AF",
                         fontSize: 13,
                         fontWeight: 700,
-                        cursor: forgotEmail ? "pointer" : "not-allowed",
+                        cursor: forgotEmail && !forgotLoading ? "pointer" : "not-allowed",
                       }}
                     >
-                      Send reset link
+                      {forgotLoading ? "Sending…" : "Send reset link"}
                     </button>
                   </div>
                 </>

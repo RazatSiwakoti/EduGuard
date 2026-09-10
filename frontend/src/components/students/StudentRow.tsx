@@ -1,4 +1,4 @@
-import { CircleAlert } from "lucide-react";
+import { CircleAlert, Star } from "lucide-react";
 import type { DashboardStudent, DashboardUnit } from "../../types/dashboard";
 import { getBucket } from "../../utils/dashboardAggregations";
 import {
@@ -24,6 +24,10 @@ interface StudentRowProps {
   onSelect?: (student: DashboardStudent) => void;
   /** Whether the Weekly Tut column is being rendered at all. */
   showTutorial: boolean;
+  isWatching: boolean;
+  onToggleWatch: (student: DashboardStudent) => void;
+  selected?: boolean;
+  onToggleSelect?: (student: DashboardStudent) => void;
 }
 
 /** "Fatima Al-Hassan" → "FA". Hyphenated and single-word names both work. */
@@ -47,7 +51,7 @@ export default function StudentRow({
   student,
   unit,
   onSelect,
-  showTutorial,
+  showTutorial, isWatching, onToggleWatch, selected = false, onToggleSelect,
 }: StudentRowProps) {
   const bucketStyles = useBucketStyles();
   const bucket = getBucket(student);
@@ -59,6 +63,7 @@ export default function StudentRow({
 
   return (
     <tr className="transition hover:bg-stone-50">
+      <td className="px-4 py-3"><input type="checkbox" aria-label={`Select ${student.name}`} checked={selected} onChange={() => onToggleSelect?.(student)} className="h-4 w-4 rounded border-stone-300 text-blue-600" /></td>
       <td className="px-4 py-3">
         <div className="flex items-center gap-3">
           <span
@@ -74,6 +79,9 @@ export default function StudentRow({
               <button> can be used. Wrapping a <tr> in a <button> is
               invalid HTML — browsers restructure the table around it —
               which is why the row-level version was dropped. */}
+          <button type="button" aria-label={isWatching ? `Remove ${student.name} from watchlist` : `Add ${student.name} to watchlist`} onClick={() => onToggleWatch(student)} className="shrink-0 text-amber-500 hover:text-amber-600">
+            <Star className="h-4 w-4" fill={isWatching ? "currentColor" : "none"} aria-hidden="true" />
+          </button>
           <div className="min-w-0">
             {interactive ? (
               <button
@@ -141,7 +149,7 @@ export default function StudentRow({
         />
       </td>
       <td className="px-4 py-3 text-right">
-        <RowReviewMenu student={student} unitCode={student.unit_code} criteria={unit?.criteria} />
+        <RowReviewMenu student={student} unitCode={student.unit_code} criteria={unit?.criteria} isWatching={isWatching} onToggleWatch={onToggleWatch} />
       </td>
     </tr>
   );

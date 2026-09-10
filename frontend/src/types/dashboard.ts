@@ -104,6 +104,7 @@ export interface LecturerDashboardResponse {
   units: DashboardUnit[];
   students: DashboardStudent[];
   checkpoint_week: number;
+  available_checkpoints: number[];
 }
 
 /**

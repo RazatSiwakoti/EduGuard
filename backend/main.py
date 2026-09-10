@@ -29,6 +29,11 @@ from app.api.routes.admin_criteria import router as admin_criteria_router
 from app.api.routes.acknowledge import router as acknowledge_router
 from app.api.routes.audit import router as audit_router
 from app.api.routes.notifications import router as notifications_router
+from app.api.routes.outcomes import router as outcomes_router
+from app.api.routes.evaluation import router as evaluation_router
+from app.api.routes.portal import router as portal_router
+from app.api.routes.retention import router as retention_router
+from app.api.routes.password_reset import router as password_reset_router
 
 
 
@@ -36,15 +41,10 @@ app = FastAPI(
     title=settings.APP_NAME,
     debug=settings.DEBUG
 )
-# Allows the React dev server (different port = different origin) to call
-# this API. Restricted to localhost dev origins only — this list must be
-# updated with the real deployed frontend URL before going to production.
+# Origins are deployment configuration, not application source.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",  # Vite's default dev port
-        "http://127.0.0.1:5173",
-    ],
+    allow_origins=[origin.strip() for origin in settings.ALLOWED_ORIGINS.split(",") if origin.strip()],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -67,6 +67,11 @@ app.include_router(admin_criteria_router)
 app.include_router(acknowledge_router)
 app.include_router(audit_router)
 app.include_router(notifications_router)
+app.include_router(outcomes_router)
+app.include_router(evaluation_router)
+app.include_router(portal_router)
+app.include_router(retention_router)
+app.include_router(password_reset_router)
 
 @app.on_event("startup")
 def _start_background_jobs() -> None:

@@ -49,6 +49,7 @@ PLACEHOLDERS: dict[str, str] = {
     "assessments_marked": "e.g. '1 of 3', or 'not recorded'",
     "checkpoint_week": "Which checkpoint this reflects, e.g. 8",
     "acknowledge_url": "The student's one-time link confirming they received this",
+    "portal_url": "A private link where the student can view their current record",
 }
 
 _PLACEHOLDER_RE = re.compile(r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}")
@@ -107,6 +108,7 @@ SYSTEM_TEMPLATES: list[dict[str, str]] = [
             "point where it's worth having a conversation. If something has been "
             "getting in the way, there is usually more that can be done about it "
             "now than later in the semester.\n\n"
+            "You can see your full record here: {{portal_url}}\n\n"
             "Please reply to this email and we'll find a time to talk. If you'd "
             "rather speak to someone else, student support can help too.\n\n"
             "{{lecturer_name}}\n"
@@ -127,6 +129,7 @@ SYSTEM_TEMPLATES: list[dict[str, str]] = [
             "Nothing here is serious yet, which is exactly why it's worth a "
             "message now rather than in a month. If you're on top of it, ignore "
             "this. If you're not, reply and let me know what's going on.\n\n"
+            "You can see your full record here: {{portal_url}}\n\n"
             "{{lecturer_name}}\n"
             "{{unit_code}}"
         ),
@@ -140,6 +143,7 @@ SYSTEM_TEMPLATES: list[dict[str, str]] = [
             "Nothing's wrong - just checking in on {{unit_code}}. Your attendance "
             "is at {{attendance_pct}} and your tutorial submissions at "
             "{{tutorial_pct}}, which is where they should be.\n\n"
+            "You can see your full record here: {{portal_url}}\n\n"
             "If anything comes up this semester, get in touch early.\n\n"
             "{{lecturer_name}}\n"
             "{{unit_code}}"

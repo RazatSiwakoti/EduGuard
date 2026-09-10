@@ -540,8 +540,17 @@ const CSV_HEADERS = [
 export function toCsv(
   students: DashboardStudent[],
   unitsById: Map<number, DashboardUnit>,
+  anonymise = false,
 ): string {
-  const lines = [CSV_HEADERS.map(csvField).join(",")];
+  const headers = anonymise
+    ? CSV_HEADERS.map((header) => header === "Student name" ? "Student name" : header)
+    : CSV_HEADERS;
+  const pseudonyms = new Map<string, string>();
+  const pseudonymFor = (number: string) => {
+    if (!pseudonyms.has(number)) pseudonyms.set(number, `Student ${String(pseudonyms.size + 1).padStart(3, "0")}`);
+    return pseudonyms.get(number)!;
+  };
+  const lines = [headers.map(csvField).join(",")];
 
   for (const student of students) {
     const attendance = attendanceOf(student);
@@ -550,8 +559,8 @@ export function toCsv(
 
     lines.push(
       [
-        csvField(student.name),
-        csvField(student.student_number),
+        csvField(anonymise ? pseudonymFor(student.student_number) : student.name),
+        csvField(anonymise ? `student-${stableHash(student.student_number)}` : student.student_number),
         csvField(student.unit_code),
         csvField(attendance ? Math.round(attendance.score) : null),
         csvField(attendance ? attendance.threshold : null),
@@ -567,6 +576,15 @@ export function toCsv(
         csvField(student.is_incomplete ? "Yes" : "No"),
       ].join(","),
     );
+  }
+
+  function stableHash(value: string): string {
+    let hash = 2166136261;
+    for (let index = 0; index < value.length; index += 1) {
+      hash ^= value.charCodeAt(index);
+      hash = Math.imul(hash, 16777619);
+    }
+    return (hash >>> 0).toString(16).padStart(8, "0");
   }
 
   // CRLF per RFC 4180 — Excel on Windows is the likeliest destination.

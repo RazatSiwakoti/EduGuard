@@ -23,6 +23,7 @@ NotificationKind = Literal[
     "verdict_overridden",     # a lecturer overrode an engine verdict (admin)
     "unit_unassigned",        # a unit has no lecturer (admin)
     "unit_unconfigured",      # a unit has no criteria, so imports are blocked (admin)
+    "follow_up_due",          # an intervention follow-up is due
 ]
 
 Severity = Literal["info", "success", "warning", "critical"]

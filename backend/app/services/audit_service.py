@@ -56,6 +56,9 @@ VERDICT_OVERRIDDEN = "verdict.overridden"
 UNIT_ASSIGNED = "unit.assigned"
 STUDENT_EDITED = "student.edited"
 STUDENT_DELETED = "student.deleted"
+OUTCOME_RECORDED = "outcome.recorded"
+INTERVENTION_RECORDED = "intervention.recorded"
+DATA_PURGED = "data.purged"
 
 ACTION_LABELS: dict[str, str] = {
     THRESHOLD_CHANGED: "Pass mark changed",
@@ -65,6 +68,8 @@ ACTION_LABELS: dict[str, str] = {
     UNIT_ASSIGNED: "Unit assignment changed",
     STUDENT_EDITED: "Student data edited",
     STUDENT_DELETED: "Student deleted",
+    OUTCOME_RECORDED: "Final enrolment outcome recorded",
+    INTERVENTION_RECORDED: "Intervention recorded",
 }
 
 ACTION_DESCRIPTIONS: dict[str, str] = {
@@ -84,6 +89,7 @@ ACTION_DESCRIPTIONS: dict[str, str] = {
         "An administrator assigned or unassigned a teaching unit.",
     STUDENT_EDITED: "A lecturer edited student demographics or appended manual scores.",
     STUDENT_DELETED: "A lecturer permanently deleted a student's data from a unit.",
+    DATA_PURGED: "Personal data was permanently purged under the retention or erasure policy.",
 }
 
 

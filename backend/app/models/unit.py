@@ -72,6 +72,7 @@ class Unit(Base):
     level = Column(String, nullable=True)
 
     start_date = Column(Date, nullable=True)
+    retention_months = Column(Integer, nullable=False, server_default="24")
 
     lecturer_id = Column(Integer, ForeignKey("users.id"), nullable=True)
 

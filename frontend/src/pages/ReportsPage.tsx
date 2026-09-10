@@ -11,6 +11,7 @@ import CriteriaTable from "../components/reports/CriteriaTable";
 import AtRiskTable from "../components/reports/AtRiskTable";
 import InterventionRecord from "../components/reports/InterventionRecord";
 import { formatDateTime } from "../utils/studentCard";
+import CheckpointSelector from "../components/dashboard/CheckpointSelector";
 
 /**
  * Reports — one unit's early-warning picture at one checkpoint.
@@ -81,6 +82,7 @@ export default function ReportsPage() {
 
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [anonymise, setAnonymise] = useState(false);
 
   /**
    * Fetch the PDF as a blob and hand it to the browser.
@@ -105,6 +107,7 @@ export default function ReportsPage() {
       const { blob, filename } = await reportService.downloadPdf(
         unitId,
         checkpointWeek,
+        anonymise,
       );
 
       const url = URL.createObjectURL(blob);
@@ -161,6 +164,12 @@ export default function ReportsPage() {
           </div>
 
           {units && units.length > 0 && (
+            <>
+            <CheckpointSelector
+              value={checkpointWeek ?? 8}
+              available={checkpoints.map((checkpoint) => checkpoint.week)}
+              onChange={setChosenWeek}
+            />
             <ReportToolbar
               units={units}
               unitId={unitId}
@@ -171,7 +180,10 @@ export default function ReportsPage() {
               onDownload={handleDownload}
               downloading={downloading}
               canDownload={report !== undefined}
+              anonymise={anonymise}
+              onAnonymiseChange={setAnonymise}
             />
+            </>
           )}
         </header>
 

@@ -130,7 +130,11 @@ def preview_alert(payload: SendRequest, db: Session = Depends(get_db), current_u
     # message shorter than the one their student receives - and a preview
     # that differs from the send is a preview that certifies nothing.
     # This token is never stored, so the link is inert by construction.
-    context = {**row["context"], "acknowledge_url": alerts.acknowledge_url("preview-link-not-active")}
+    context = {
+        **row["context"],
+        "acknowledge_url": alerts.acknowledge_url("preview-link-not-active"),
+        "portal_url": f"{alerts.settings.PUBLIC_BASE_URL.rstrip('/')}/portal/preview-link-not-active",
+    }
     body = ensure_acknowledgement(render(template.body, context), context["acknowledge_url"])
     return PreviewOut(student_id=student.id, unit_id=unit.id, recipient_email=student.email, recipient_name=student.name, subject=render(template.subject, context), body=body, template_id=template.id, template_name=template.name, eligible=row["eligible"], blocked_reason=reason, blocked_detail=alerts.BLOCKED_REASONS.get(reason) if reason else None)
 

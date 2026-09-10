@@ -2,7 +2,7 @@ import { useState } from "react";
 import * as AlertDialog from "@radix-ui/react-alert-dialog";
 import * as Dialog from "@radix-ui/react-dialog";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { MoreVertical } from "lucide-react";
+import { MoreVertical, Star } from "lucide-react";
 import type { DashboardStudent, DashboardUnitCriterion, RiskTier } from "../../types/dashboard";
 import { BUCKET_LABELS } from "../../utils/dashboardAggregations";
 import { useBucketStyles } from "../dashboard/chartTheme";
@@ -13,11 +13,13 @@ interface Props {
   student: DashboardStudent;
   unitCode: string;
   criteria?: DashboardUnitCriterion[];
+  isWatching?: boolean;
+  onToggleWatch?: (student: DashboardStudent) => void;
 }
 
 const tiers: RiskTier[] = ["safe", "low_risk", "high_risk"];
 
-export default function RowReviewMenu({ student, unitCode, criteria = [] }: Props) {
+export default function RowReviewMenu({ student, unitCode, criteria = [], isWatching = false, onToggleWatch }: Props) {
   const bucketStyles = useBucketStyles();
   const [reviewTier, setReviewTier] = useState<RiskTier | null>(null);
   const [comment, setComment] = useState("");
@@ -64,6 +66,9 @@ export default function RowReviewMenu({ student, unitCode, criteria = [] }: Prop
               </DropdownMenu.Item>
             ))}
             <DropdownMenu.Separator className="my-1 h-px bg-stone-200" />
+            {onToggleWatch && <DropdownMenu.Item onSelect={() => onToggleWatch(student)} className="flex cursor-pointer items-center gap-2 rounded px-3 py-2 text-sm outline-none hover:bg-stone-100">
+              <Star className="h-4 w-4" fill={isWatching ? "currentColor" : "none"} /> {isWatching ? "Remove from watchlist" : "Add to watchlist"}
+            </DropdownMenu.Item>}
             <DropdownMenu.Item onSelect={() => setEditOpen(true)} className="cursor-pointer rounded px-3 py-2 text-sm outline-none hover:bg-stone-100">Edit student data</DropdownMenu.Item>
             <DropdownMenu.Item onSelect={() => setDeleteOpen(true)} className="cursor-pointer rounded px-3 py-2 text-sm text-red-600 outline-none hover:bg-red-50">Delete from this unit</DropdownMenu.Item>
           </DropdownMenu.Content>

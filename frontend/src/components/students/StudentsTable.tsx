@@ -77,6 +77,11 @@ interface StudentsTableProps {
    * no column — it reads as a cohort that stopped submitting.
    */
   showTutorial: boolean;
+  selectedKeys?: Set<string>;
+  onToggleSelect?: (student: DashboardStudent) => void;
+  onTogglePage?: (checked: boolean) => void;
+  watching: Set<string>;
+  onToggleWatch: (student: DashboardStudent) => void;
 }
 
 /**
@@ -112,7 +117,7 @@ export default function StudentsTable({
   emptyMessage,
   onClearFilters,
   onSelectStudent,
-  showTutorial,
+  showTutorial, selectedKeys = new Set(), onToggleSelect, onTogglePage, watching, onToggleWatch,
 }: StudentsTableProps) {
   // Derived from PAGE_SIZE rather than a literal, so the "showing 9–16
   // of 47" line can never drift out of step with the actual slice.
@@ -149,6 +154,7 @@ export default function StudentsTable({
           <table className="w-full">
             <tbody>
               <tr>
+                <th scope="col" className="px-4 py-3"><input type="checkbox" aria-label="Select visible students" checked={rows.length > 0 && rows.every((row) => selectedKeys.has(`${row.student_id}-${row.unit_id}`))} onChange={(event) => onTogglePage?.(event.target.checked)} className="h-4 w-4 rounded border-stone-300 text-blue-600" /></th>
                 <td colSpan={showTutorial ? 7 : 6}>
                   <p className="text-sm text-stone-500">{emptyMessage}</p>
 
@@ -246,6 +252,10 @@ export default function StudentsTable({
                     unit={unitsById.get(student.unit_id)}
                     onSelect={onSelectStudent}
                     showTutorial={showTutorial}
+                    selected={selectedKeys.has(`${student.student_id}-${student.unit_id}`)}
+                    onToggleSelect={onToggleSelect}
+                    isWatching={watching.has(`${student.student_id}-${student.unit_id}`)}
+                    onToggleWatch={onToggleWatch}
                   />
                 ))}
               </tbody>

@@ -83,5 +83,14 @@ class PasswordChange(BaseModel):
     new_password: str = Field(..., min_length=8, max_length=64)
 
 
+class PasswordResetRequest(BaseModel):
+    email: EmailStr
+
+
+class PasswordResetConfirm(BaseModel):
+    token: str = Field(..., min_length=20, max_length=200)
+    new_password: str = Field(..., min_length=8, max_length=64)
+
+
 class AvatarUpload(BaseModel):
     data_url: str = Field(..., max_length=90_000)

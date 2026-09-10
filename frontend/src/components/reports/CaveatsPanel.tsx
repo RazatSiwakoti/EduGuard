@@ -35,6 +35,9 @@ export default function CaveatsPanel({ caveats }: CaveatsPanelProps) {
             <span className="font-semibold">No qualifications apply.</span> Every
             enrolled student has been analysed on complete data, and no engine
             disagreements are outstanding.
+            <br />
+            Gender and age are used as model features; performance should be
+            checked for material differences between demographic groups.
           </p>
         </div>
       </section>
@@ -65,6 +68,10 @@ export default function CaveatsPanel({ caveats }: CaveatsPanelProps) {
           </li>
         ))}
       </ul>
+      <p className="mt-3 border-t border-orange-200 pt-2 text-xs text-orange-900">
+        Gender and age are used as model features; performance should be checked
+        for material differences between demographic groups.
+      </p>
     </section>
   );
 }

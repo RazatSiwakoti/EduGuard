@@ -56,9 +56,10 @@ export const reportService = {
   downloadPdf: async (
     unitId: number,
     checkpointWeek?: number | null,
+    anonymise = false,
   ): Promise<{ blob: Blob; filename: string }> => {
     const res = await api.get<Blob>(`/lecturer/reports/unit/${unitId}/pdf`, {
-      params: checkpointWeek ? { checkpoint_week: checkpointWeek } : undefined,
+      params: { ...(checkpointWeek ? { checkpoint_week: checkpointWeek } : {}), anonymise },
       responseType: "blob",
     });
 

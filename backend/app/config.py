@@ -72,6 +72,7 @@ class Settings(BaseSettings):
     # that used to be a literal inside scheduler.py, where nobody
     # demonstrating the system could reach it.
     ALERT_SWEEP_CRON: str = "0 8 * * 1"
+    ANALYSIS_CRON: str = "0 6 * * mon"
 
     # ML
     MODEL_PATH: str

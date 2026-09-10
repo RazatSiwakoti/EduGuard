@@ -7,6 +7,7 @@ direct-send design onto this queue.
 """
 
 import secrets
+import hashlib
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -24,6 +25,7 @@ from app.models.risk_score import RiskScore
 from app.models.student import Student
 from app.models.unit import Unit
 from app.models.user import User
+from app.models.student_access import StudentAccessToken
 from app.services.email_backend import get_email_backend
 from app.services.email_render import (
     SYSTEM_TEMPLATES,
@@ -173,6 +175,25 @@ def acknowledge_url(token: str) -> str:
     return f"{(settings.PUBLIC_BASE_URL or '').rstrip('/')}/alerts/acknowledge/{token}"
 
 
+def portal_url(db: Session, student, unit) -> str:
+    """Create or reuse a short-lived portal capability for this student/unit."""
+    raw = new_ack_token()
+    digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+    now = _now()
+    access = db.execute(
+        select(StudentAccessToken).where(
+            StudentAccessToken.student_id == student.id,
+            StudentAccessToken.unit_id == unit.id,
+        )
+    ).scalars().first()
+    if access is None:
+        access = StudentAccessToken(student_id=student.id, unit_id=unit.id)
+        db.add(access)
+    access.token_hash = digest
+    access.expires_at = now + timedelta(days=14)
+    return f"{(settings.PUBLIC_BASE_URL or '').rstrip('/')}/portal/{raw}"
+
+
 def queue_alert(db, student, unit, lecturer, verdict, template, context, trigger, created_by=None):
     # The token is minted BEFORE the body is rendered, because the URL is
     # part of the text being frozen into the log. Rendering first and
@@ -180,7 +201,11 @@ def queue_alert(db, student, unit, lecturer, verdict, template, context, trigger
     # delivered body could differ - and the stored body is the only
     # evidence of what the student was actually told.
     token = new_ack_token()
-    context = {**context, "acknowledge_url": acknowledge_url(token)}
+    context = {
+        **context,
+        "acknowledge_url": acknowledge_url(token),
+        "portal_url": portal_url(db, student, unit),
+    }
     body = ensure_acknowledgement(render(template.body, context), context["acknowledge_url"])
     message = EmailMessage(kind="student_alert", student_id=student.id, unit_id=unit.id, lecturer_id=unit.lecturer_id, recipient_email=(student.email or "").strip(), recipient_name=student.name, subject=render(template.subject, context), body=body, template_id=template.id, template_name=template.name, risk_tier=verdict.final_tier, verdict_id=verdict.id, trigger=trigger, status="queued", created_by=created_by, ack_token=token)
     db.add(message)

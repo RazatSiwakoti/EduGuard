@@ -4,6 +4,8 @@ import type {
   StudentNoteDetail,
   StudentReviewSubmit,
   StudentEditPayload,
+  InterventionCreate,
+  InterventionDetail,
 } from "../types/studentDetail";
 
 /**
@@ -16,6 +18,12 @@ import type {
  * omit it and force the backend to pick one arbitrarily.
  */
 export const studentDetailService = {
+  trajectory: async (studentId: number, unitId: number) => {
+    const res = await api.get(`/lecturer/students/${studentId}/trajectory`, {
+      params: { unit_id: unitId },
+    });
+    return res.data;
+  },
   get: async (
     studentId: number,
     unitId: number,
@@ -41,6 +49,15 @@ export const studentDetailService = {
       `/lecturer/students/${studentId}/note`,
       { body },
       { params: { unit_id: unitId } },
+    );
+    return res.data;
+  },
+
+  recordIntervention: async (
+    studentId: number, unitId: number, payload: InterventionCreate,
+  ): Promise<InterventionDetail> => {
+    const res = await api.post<InterventionDetail>(
+      `/lecturer/students/${studentId}/interventions`, payload, { params: { unit_id: unitId } },
     );
     return res.data;
   },

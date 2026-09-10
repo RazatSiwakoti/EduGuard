@@ -36,8 +36,10 @@ from app.models.final_verdicts import FinalVerdict
 from app.models.risk_score import RiskScore
 from app.models.student import Student
 from app.models.student_note import StudentNote
+from app.models.intervention import Intervention
+from app.models.email_message import EmailMessage
 from app.models.unit import Unit
-from app.services.dashboard_service import DEFAULT_CHECKPOINT_WEEK
+from app.core.checkpoints import DEFAULT_CHECKPOINT_WEEK
 from app.models.user import User
 from app.models.verdict_review import VerdictReview
 from app.services.final_verdict_service import record_review
@@ -262,6 +264,7 @@ def get_student_detail(
         "note": (
             {"body": note.body, "updated_at": note.updated_at} if note else None
         ),
+        "interventions": _interventions(db, student_id, unit_id),
         "verdict_id": verdict.id if verdict else None,
         # Set whether the decision was submitted against THIS verdict or
         # carried forward onto it from an earlier run. Either way a human
@@ -270,6 +273,70 @@ def get_student_detail(
         # the system look more automated than it is.
         "applied_review_id": verdict.review_id if verdict else None,
         "review_history": _review_history(db, student_id, unit_id, checkpoint_week),
+    }
+
+
+def _interventions(db: Session, student_id: int, unit_id: int) -> list[dict]:
+    """Return manual interventions plus sent email contacts, newest first."""
+    rows = [
+        {
+            "id": f"intervention:{row.id}",
+            "kind": row.kind,
+            "occurred_at": row.occurred_at,
+            "summary": row.summary,
+            "outcome": row.outcome,
+            "follow_up_on": row.follow_up_on,
+            "automatic": False,
+        }
+        for row in db.execute(
+            select(Intervention).where(
+                Intervention.student_id == student_id,
+                Intervention.unit_id == unit_id,
+            )
+        ).scalars().all()
+    ]
+    rows.extend(
+        {
+            "id": f"email:{message.id}",
+            "kind": "email",
+            "occurred_at": message.sent_at or message.queued_at,
+            "summary": message.subject,
+            "outcome": None,
+            "follow_up_on": None,
+            "automatic": True,
+        }
+        for message in db.execute(
+            select(EmailMessage).where(
+                EmailMessage.student_id == student_id,
+                EmailMessage.unit_id == unit_id,
+                EmailMessage.status == "sent",
+            )
+        ).scalars().all()
+    )
+    return sorted(rows, key=lambda row: row["occurred_at"], reverse=True)
+
+
+def create_intervention(
+    db: Session,
+    lecturer_id: int,
+    student_id: int,
+    unit_id: int,
+    payload: dict,
+) -> Optional[dict]:
+    if _owned_unit(db, unit_id, lecturer_id) is None or _enrolled(db, student_id, unit_id) is None:
+        return None
+    row = Intervention(student_id=student_id, unit_id=unit_id, lecturer_id=lecturer_id, **payload)
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return {
+        "id": f"intervention:{row.id}",
+        "kind": row.kind,
+        "occurred_at": row.occurred_at,
+        "summary": row.summary,
+        "outcome": row.outcome,
+        "follow_up_on": row.follow_up_on,
+        "automatic": False,
     }
 
 

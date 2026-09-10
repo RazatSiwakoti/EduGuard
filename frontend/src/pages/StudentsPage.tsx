@@ -2,8 +2,10 @@ import { useCallback, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { CircleAlert, Users } from "lucide-react";
 import type { DashboardStudent, RiskBucket } from "../types/dashboard";
+import type { RiskTier } from "../types/dashboard";
 import type { StudentCardTarget } from "../types/studentDetail";
 import { useLecturerDashboard } from "../hooks/useDashboard";
+import { useToggleWatchlist, useWatchlist } from "../hooks/useWatchlist";
 import {
   PAGE_SIZE,
   countsByBucket,
@@ -23,6 +25,9 @@ import StudentsFilterBar from "../components/students/StudentsFilterBar";
 import StudentsTable from "../components/students/StudentsTable";
 import StudentsToolbar from "../components/students/StudentsToolBar";
 import StudentCard from "../components/students/card/StudentCard";
+import CheckpointSelector from "../components/dashboard/CheckpointSelector";
+import { alertService } from "../services/alertService";
+import { studentDetailService } from "../services/studentDetailService";
 
 /**
  * Students — every enrolment across the lecturer's units (Phase 7.6a).
@@ -44,14 +49,19 @@ import StudentCard from "../components/students/card/StudentCard";
  * every keystroke.
  */
 export default function StudentsPage() {
-  const { data, isLoading, isError, error } = useLecturerDashboard();
+  const [checkpointWeek, setCheckpointWeek] = useState<number | undefined>();
+  const { data, isLoading, isError, error } = useLecturerDashboard(checkpointWeek);
+  const { data: watchlist = [] } = useWatchlist();
+  const toggleWatchlist = useToggleWatchlist();
 
-  const [bucket, setBucket] = useState<RiskBucket | null>(null);
+  const [bucket, setBucket] = useState<RiskBucket | "watching" | null>(null);
   const [unitId, setUnitId] = useState<number | null>(null);
   const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("risk");
   const [direction, setDirection] = useState<SortDirection>("asc");
   const [page, setPage] = useState(1);
+  const [anonymise, setAnonymise] = useState(false);
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
 
   /**
    * Which card is open, held in the URL rather than in state.
@@ -107,6 +117,10 @@ export default function StudentsPage() {
 
   const units = useMemo(() => data?.units ?? [], [data]);
   const students = useMemo(() => data?.students ?? [], [data]);
+  const watching = useMemo(
+    () => new Set(watchlist.map((item) => `${item.student_id}-${item.unit_id}`)),
+    [watchlist],
+  );
 
   /**
    * Unit lookup for the assessment denominator and the CSV. Built once
@@ -126,8 +140,13 @@ export default function StudentsPage() {
   const counts = useMemo(() => countsByBucket(inSubject), [inSubject]);
 
   const filtered = useMemo(
-    () => searchStudents(filterByBucket(inSubject, bucket), search),
-    [inSubject, bucket, search],
+    () => searchStudents(
+      bucket === "watching"
+        ? inSubject.filter((student) => watching.has(`${student.student_id}-${student.unit_id}`))
+        : filterByBucket(inSubject, bucket),
+      search,
+    ),
+    [inSubject, bucket, search, watching],
   );
 
   const sorted = useMemo(
@@ -171,6 +190,64 @@ export default function StudentsPage() {
    */
   const safePage = Math.min(page, totalPages);
   const visible = useMemo(() => pageSlice(sorted, safePage, PAGE_SIZE), [sorted, safePage]);
+  const selectedRows = useMemo(
+    () => students.filter((student) => selectedKeys.has(`${student.student_id}-${student.unit_id}`)),
+    [students, selectedKeys],
+  );
+
+  function toggleSelection(student: DashboardStudent) {
+    const key = `${student.student_id}-${student.unit_id}`;
+    setSelectedKeys((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else if (next.size < 50) next.add(key);
+      else window.alert("You can select at most 50 students per bulk action.");
+      return next;
+    });
+  }
+
+  function togglePageSelection(checked: boolean) {
+    setSelectedKeys((current) => {
+      const next = new Set(current);
+      visible.forEach((student) => {
+        const key = `${student.student_id}-${student.unit_id}`;
+        if (checked && next.size < 50) next.add(key);
+        if (!checked) next.delete(key);
+      });
+      return next;
+    });
+  }
+
+  function tierBreakdown(rows: DashboardStudent[]) {
+    return rows.reduce<Record<string, number>>((counts, row) => {
+      const tier = row.final_tier ?? (row.requires_review ? "needs review" : "not analysed");
+      counts[tier] = (counts[tier] ?? 0) + 1;
+      return counts;
+    }, {});
+  }
+
+  async function sendSelectedAlerts() {
+    const breakdown = Object.entries(tierBreakdown(selectedRows)).map(([tier, count]) => `${count} ${tier}`).join(", ");
+    if (!window.confirm(`Send alerts to ${selectedRows.length} selected students (${breakdown})?`)) return;
+    await alertService.sendBulk(selectedRows.map((row) => ({ student_id: row.student_id, unit_id: row.unit_id })));
+    setSelectedKeys(new Set());
+  }
+
+  async function markSelectedReviewed() {
+    const reviewable = selectedRows.filter((row): row is DashboardStudent & { final_tier: RiskTier } => row.final_tier !== null && !row.requires_review);
+    if (reviewable.length === 0) {
+      window.alert("None of the selected students has a resolved risk tier to mark reviewed.");
+      return;
+    }
+    const breakdown = Object.entries(tierBreakdown(reviewable)).map(([tier, count]) => `${count} ${tier}`).join(", ");
+    if (!window.confirm(`Mark ${reviewable.length} selected students reviewed (${breakdown})?`)) return;
+    await Promise.all(reviewable.map((row) => studentDetailService.submitReview(row.student_id, row.unit_id, { decision: row.final_tier })));
+    setSelectedKeys(new Set());
+  }
+
+  function exportSelected() {
+    downloadCsv(toCsv(selectedRows, unitsById, anonymise), csvFilename("selected"));
+  }
 
   /**
    * Every filter change returns to page 1.
@@ -183,6 +260,19 @@ export default function StudentsPage() {
   function changeBucket(next: RiskBucket | null) {
     setBucket(next);
     setPage(1);
+  }
+
+  function changeWatching() {
+    setBucket("watching");
+    setPage(1);
+  }
+
+  function toggleWatch(student: DashboardStudent) {
+    toggleWatchlist.mutate({
+      studentId: student.student_id,
+      unitId: student.unit_id,
+      watching: watching.has(`${student.student_id}-${student.unit_id}`),
+    });
   }
 
   function changeUnit(next: number | null) {
@@ -219,7 +309,7 @@ export default function StudentsPage() {
     // `sorted`, not `visible` — the export covers every filtered row in
     // the order shown, not just the eight currently rendered.
     const selectedUnit = unitId === null ? null : (unitsById.get(unitId)?.unit_code ?? null);
-    downloadCsv(toCsv(sorted, unitsById), csvFilename(selectedUnit));
+    downloadCsv(toCsv(sorted, unitsById, anonymise), csvFilename(selectedUnit));
   }
 
   if (isLoading) {
@@ -302,14 +392,29 @@ export default function StudentsPage() {
           studentCount={distinctStudents}
           unitCount={units.length}
           checkpointWeek={data?.checkpoint_week ?? 8}
+          anonymise={anonymise}
+          onAnonymiseChange={setAnonymise}
+          selectedCount={selectedRows.length}
+          onSendAlerts={sendSelectedAlerts}
+          onMarkReviewed={markSelectedReviewed}
+          onAddToWatchlist={() => window.alert("Use the star on each row to add students to the watchlist.")}
+          onExportSelected={exportSelected}
         />
+        <div className="mb-5 flex justify-end">
+          <CheckpointSelector value={data?.checkpoint_week ?? 8}
+            available={data?.available_checkpoints}
+            onChange={setCheckpointWeek} />
+        </div>
 
         <div className="mb-4">
           <RiskTabs
             counts={counts}
             total={inSubject.length}
-            active={bucket}
+            active={bucket === "watching" ? null : bucket}
             onChange={changeBucket}
+            watchingCount={inSubject.filter((student) => watching.has(`${student.student_id}-${student.unit_id}`)).length}
+            watchingActive={bucket === "watching"}
+            onWatchingChange={changeWatching}
           />
         </div>
 
@@ -344,6 +449,11 @@ export default function StudentsPage() {
           }
           onSelectStudent={openCard}
           showTutorial={showTutorial}
+          watching={watching}
+          onToggleWatch={toggleWatch}
+          selectedKeys={selectedKeys}
+          onToggleSelect={toggleSelection}
+          onTogglePage={togglePageSelection}
         />
 
         {/* Mounted only while a card is open, so its focus trap, scroll

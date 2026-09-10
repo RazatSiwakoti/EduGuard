@@ -1,4 +1,4 @@
-import { Mail, Users } from "lucide-react";
+import { Download, Eye, Mail, Users } from "lucide-react";
 
 interface StudentsToolbarProps {
   /** Enrolments in scope — NOT distinct people. See the note below. */
@@ -8,6 +8,13 @@ interface StudentsToolbarProps {
   unitCount: number;
   /** Echoed from the payload rather than hardcoded. */
   checkpointWeek: number;
+  anonymise: boolean;
+  onAnonymiseChange: (value: boolean) => void;
+  selectedCount?: number;
+  onSendAlerts?: () => void;
+  onMarkReviewed?: () => void;
+  onAddToWatchlist?: () => void;
+  onExportSelected?: () => void;
 }
 
 /**
@@ -30,6 +37,13 @@ export default function StudentsToolbar({
   studentCount,
   unitCount,
   checkpointWeek,
+  anonymise,
+  onAnonymiseChange,
+  selectedCount = 0,
+  onSendAlerts,
+  onMarkReviewed,
+  onAddToWatchlist,
+  onExportSelected,
 }: StudentsToolbarProps) {
   const enrolmentsDifferFromPeople = enrolmentCount !== studentCount;
 
@@ -59,15 +73,19 @@ export default function StudentsToolbar({
         </p>
       </div>
 
-      <button
-        type="button"
-        disabled
-        title="Bulk email arrives with the Alerts section"
-        className="inline-flex cursor-not-allowed items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-medium text-white opacity-50"
-      >
-        <Mail className="h-4 w-4" aria-hidden="true" />
-        Email All At-Risk
-      </button>
+      <label className="flex items-center gap-2 text-sm text-stone-600" title="For sharing outside the teaching team.">
+        <input type="checkbox" checked={anonymise} onChange={(event) => onAnonymiseChange(event.target.checked)} />
+        Remove identifying details
+      </label>
+      {selectedCount > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2">
+          <span className="mr-1 text-sm font-medium text-blue-900">{selectedCount} selected</span>
+          <button type="button" onClick={onSendAlerts} className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-xs font-medium text-white"><Mail className="h-3.5 w-3.5" /> Send alerts</button>
+          <button type="button" onClick={onMarkReviewed} className="inline-flex items-center gap-1.5 rounded-lg bg-stone-800 px-3 py-2 text-xs font-medium text-white"><Eye className="h-3.5 w-3.5" /> Mark reviewed</button>
+          <button type="button" onClick={onAddToWatchlist} disabled title="Watchlist is not available yet" className="inline-flex cursor-not-allowed items-center gap-1.5 rounded-lg border border-stone-300 px-3 py-2 text-xs font-medium text-stone-500">Add to watchlist</button>
+          <button type="button" onClick={onExportSelected} className="inline-flex items-center gap-1.5 rounded-lg border border-stone-300 px-3 py-2 text-xs font-medium text-stone-700"><Download className="h-3.5 w-3.5" /> Export selected</button>
+        </div>
+      )}
     </header>
   );
 }

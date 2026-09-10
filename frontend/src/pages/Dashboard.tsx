@@ -21,6 +21,7 @@ import RiskByUnitChart from "../components/dashboard/RiskByUnitChart";
 import RiskDistributionDonut from "../components/dashboard/RiskDistributionDonut";
 import StudentTable from "../components/dashboard/StudentTable";
 import RunAnalysisButton from "../components/analysis/RunAnalysisButton";
+import CheckpointSelector from "../components/dashboard/CheckpointSelector";
 
 /**
  * The lecturer's interactive analytics dashboard — Phase 6.2.
@@ -43,7 +44,8 @@ import RunAnalysisButton from "../components/analysis/RunAnalysisButton";
  * Initial state is "All units, all risk levels", as specified.
  */
 export default function Dashboard() {
-  const { data, isLoading, isError, error, isFetching } = useLecturerDashboard();
+  const [checkpointWeek, setCheckpointWeek] = useState<number | undefined>();
+  const { data, isLoading, isError, error, isFetching } = useLecturerDashboard(checkpointWeek);
   const refreshDashboard = useRefreshDashboard();
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
 
@@ -153,6 +155,11 @@ export default function Dashboard() {
 
 
           <div className="flex flex-wrap items-center gap-2">
+            <CheckpointSelector
+              value={data?.checkpoint_week ?? 8}
+              available={data?.available_checkpoints}
+              onChange={setCheckpointWeek}
+            />
             {/* Refresh re-reads what the engines already decided.
               Run analysis re-decides it. Two different actions, so
               they sit side by side rather than one being buried. */}            

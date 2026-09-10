@@ -42,14 +42,12 @@ from app.models.risk_score import RiskScore
 from app.models.student import Student
 from app.models.unit import Unit
 from typing import Optional
+from app.core.checkpoints import DEFAULT_CHECKPOINT_WEEK, available_checkpoints
 
 
 # Matches the default used by the risk routes and run-analysis. Kept as a
 # named constant so the dashboard and the pipeline can never disagree
 # about which checkpoint is "the current one".
-DEFAULT_CHECKPOINT_WEEK = 8
-
-
 def _fetch_units(db: Session, lecturer_id: int) -> list[Unit]:
     """
     Active units assigned to this lecturer, ordered for a stable filter
@@ -294,7 +292,8 @@ def get_lecturer_dashboard(
     # state, not an error - return an empty but well-formed payload so
     # the frontend renders its empty state instead of failing.
     if not units:
-        return {"units": [], "students": [], "checkpoint_week": checkpoint_week}
+        return {"units": [], "students": [], "checkpoint_week": checkpoint_week,
+                "available_checkpoints": []}
 
     unit_ids = [u.id for u in units]
     unit_code_by_id = {u.id: u.unit_code for u in units}
@@ -363,4 +362,9 @@ def get_lecturer_dashboard(
         "units": [_unit_to_dict(u, criteria_by_unit.get(u.id, [])) for u in units],
         "students": students_payload,
         "checkpoint_week": checkpoint_week,
+        "available_checkpoints": sorted({
+            week
+            for unit in units
+            for week in available_checkpoints(db, unit.id)
+        }),
     }

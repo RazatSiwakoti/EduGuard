@@ -124,6 +124,7 @@ class LecturerDashboardResponse(BaseModel):
     # Echoed back so the UI can label charts honestly ("Week 8 checkpoint")
     # instead of hardcoding a number the backend might later change.
     checkpoint_week: int
+    available_checkpoints: list[int] = []
 
 class DashboardUnitCriterion(BaseModel):
     """

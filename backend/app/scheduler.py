@@ -5,10 +5,14 @@ import re
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
+from sqlalchemy import select
 
 from app.config import settings
 from app.database import SessionLocal
+from app.models.enrollment import Enrollment
+from app.models.unit import Unit
 from app.services import alert_service as alerts
+from app.services.analysis_service import run_analysis_for_students
 
 logger = logging.getLogger("eduguard.scheduler")
 _scheduler: BackgroundScheduler | None = None
@@ -25,6 +29,45 @@ def weekly_alert_sweep() -> None:
         logger.info("alert sweep: %s units, %s queued, skipped=%s", summary["units"], summary["queued"], summary["skipped"])
     except Exception:
         logger.exception("alert sweep failed")
+    finally:
+        db.close()
+
+
+ANALYSIS_LOCK_KEY = 780_003
+
+
+def weekly_analysis_run() -> None:
+    """Recomputes every active unit before the weekly alert sweep."""
+    logger.info("scheduled analysis started")
+    db = SessionLocal()
+    try:
+        with alerts.advisory_lock(db, ANALYSIS_LOCK_KEY) as lock:
+            if not lock.acquired:
+                logger.info("scheduled analysis skipped - another worker holds the lock")
+                return
+            total = succeeded = failed = 0
+            week = settings.CHECKPOINT_WEEK
+            units = list(db.execute(
+                select(Unit).where(Unit.is_active.is_(True)).order_by(Unit.id)
+            ).scalars())
+            for unit in units:
+                student_ids = list(db.execute(
+                    select(Enrollment.student_id).where(Enrollment.unit_id == unit.id)
+                ).scalars())
+                if not student_ids:
+                    continue
+                result = run_analysis_for_students(db, unit.id, student_ids, week)
+                db.commit()
+                total += result["total_students"]
+                succeeded += result["succeeded"]
+                failed += result["failed"]
+            logger.info(
+                "scheduled analysis finished: units=%s students=%s succeeded=%s failed=%s",
+                len(units), total, succeeded, failed,
+            )
+    except Exception:
+        db.rollback()
+        logger.exception("scheduled analysis failed")
     finally:
         db.close()
 
@@ -105,6 +148,18 @@ def sweep_trigger() -> CronTrigger:
         return CronTrigger.from_crontab(DEFAULT_SWEEP_CRON)
 
 
+def analysis_trigger() -> CronTrigger:
+    raw = (settings.ANALYSIS_CRON or "").strip() or "0 6 * * mon"
+    expression = normalise_day_of_week(raw)
+    if expression != raw:
+        logger.info("ANALYSIS_CRON %r read as %r (day-of-week translated to APScheduler's numbering)", raw, expression)
+    try:
+        return CronTrigger.from_crontab(expression)
+    except ValueError:
+        logger.error("ANALYSIS_CRON is not valid (%r) - falling back to '0 6 * * mon'", raw)
+        return CronTrigger.from_crontab("0 6 * * mon")
+
+
 def start_scheduler() -> BackgroundScheduler | None:
     """Seeds system templates and starts both scheduled jobs."""
     global _scheduler
@@ -122,11 +177,12 @@ def start_scheduler() -> BackgroundScheduler | None:
         db.close()
 
     scheduler = BackgroundScheduler(timezone=settings.SCHEDULER_TIMEZONE)
+    scheduler.add_job(weekly_analysis_run, analysis_trigger(), id="weekly_analysis_run", replace_existing=True, coalesce=True, misfire_grace_time=7200, max_instances=1)
     scheduler.add_job(weekly_alert_sweep, sweep_trigger(), id="weekly_alert_sweep", replace_existing=True, coalesce=True, misfire_grace_time=3600, max_instances=1)
     scheduler.add_job(drain_outbox_job, CronTrigger(minute="*"), id="drain_outbox", replace_existing=True, coalesce=True, max_instances=1)
     scheduler.start()
     _scheduler = scheduler
-    logger.info("scheduler started (%s): sweep '%s', outbox drain every minute", settings.SCHEDULER_TIMEZONE, settings.ALERT_SWEEP_CRON)
+    logger.info("scheduler started (%s): analysis '%s', sweep '%s', outbox drain every minute", settings.SCHEDULER_TIMEZONE, settings.ANALYSIS_CRON, settings.ALERT_SWEEP_CRON)
     return scheduler
 
 

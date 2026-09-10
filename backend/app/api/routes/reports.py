@@ -34,8 +34,8 @@ from app.database import get_db
 from app.models.user import User
 from app.schemas.reports import ReportCheckpoint, ReportResponse
 from app.services.report_pdf import build_report_pdf, report_filename
+from app.core.checkpoints import DEFAULT_CHECKPOINT_WEEK
 from app.services.report_service import (
-    DEFAULT_CHECKPOINT_WEEK,
     available_checkpoints,
     build_unit_report,
 )
@@ -91,6 +91,7 @@ def get_unit_report(
 def download_unit_report(
     unit_id: int = Path(..., ge=1, description="Unit the report is about."),
     checkpoint_week: Optional[int] = Query(None, ge=1, le=52),
+    anonymise: bool = Query(False),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_teaching_role()),
 ) -> Response:
@@ -116,7 +117,7 @@ def download_unit_report(
     if report is None:
         raise HTTPException(status_code=404, detail="Unit not found")
 
-    pdf = build_report_pdf(report)
+    pdf = build_report_pdf(report, anonymise=anonymise)
 
     return Response(
         content=pdf,

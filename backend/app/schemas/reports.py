@@ -174,6 +174,10 @@ class ReportInterventionSummary(BaseModel):
 
     reviews_resolved: int = 0
     reviews_pending: int = 0
+    interventions_total: int = 0
+    interventions_by_kind: dict[str, int] = {}
+    interventions_by_outcome: dict[str, int] = {}
+    median_contact_minutes: Optional[float] = None
     
 class ReportCheckpoint(BaseModel):
     """

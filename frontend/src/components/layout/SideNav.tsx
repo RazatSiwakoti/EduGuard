@@ -7,6 +7,7 @@ import {
   ShieldCheck,
   Users,
   UsersRound,
+  Activity,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
@@ -97,6 +98,13 @@ const NAV_ITEMS: NavItem[] = [
     label: "Admin Panel",
     icon: UsersRound,
     roles: ["admin"],
+    group: "Administration",
+  },
+  {
+    to: "/admin/model",
+    label: "Model performance",
+    icon: Activity,
+    roles: ["admin", "super_admin"],
     group: "Administration",
   },
   {

@@ -31,10 +31,12 @@ which would confirm that someone else's unit exists.
 """
 
 from datetime import datetime, timezone
+from statistics import median
 from typing import Optional
 
 from sqlalchemy import inspect, select
 from sqlalchemy.orm import Session
+from app.core.checkpoints import DEFAULT_CHECKPOINT_WEEK
 
 from app.models.assessment_event import AssessmentEvent
 from app.models.criteria import Criteria
@@ -45,9 +47,9 @@ from app.models.student import Student
 from app.models.unit import Unit
 from app.models.user import User
 from app.models.verdict_review import VerdictReview
+from app.models.intervention import Intervention
 from app.services import unit_composition
 
-DEFAULT_CHECKPOINT_WEEK = 8
 
 #: Worst first. The report lists at-risk students in this order, so a
 #: reader who only gets through the first page has read the students who
@@ -454,6 +456,10 @@ def _intervention_summary(
         "students_acknowledged": 0,
         "reviews_resolved": 0,
         "reviews_pending": 0,
+        "interventions_total": 0,
+        "interventions_by_kind": {},
+        "interventions_by_outcome": {},
+        "median_contact_minutes": None,
     }
     per_student: dict[int, dict] = {}
 
@@ -562,6 +568,50 @@ def _intervention_summary(
         # three times and confirm all three; counting messages would
         # report three people reached.
         summary["students_acknowledged"] = len(acknowledged_students)
+
+    interventions = db.execute(
+        select(Intervention).where(Intervention.unit_id == unit_id)
+    ).scalars().all()
+    for intervention in interventions:
+        summary["interventions_total"] += 1
+        summary["interventions_by_kind"][intervention.kind] = (
+            summary["interventions_by_kind"].get(intervention.kind, 0) + 1
+        )
+        outcome = intervention.outcome or "none"
+        summary["interventions_by_outcome"][outcome] = (
+            summary["interventions_by_outcome"].get(outcome, 0) + 1
+        )
+
+    # Compare the first deliberate contact (manual or sent email) with the
+    # first flag at this checkpoint, then report the median in minutes.
+    flags = {}
+    for verdict in db.execute(
+        select(FinalVerdict).where(
+            FinalVerdict.unit_id == unit_id,
+            FinalVerdict.checkpoint_week == checkpoint_week,
+        )
+    ).scalars().all():
+        flags.setdefault(verdict.student_id, verdict.created_at)
+    contacts: dict[int, list[datetime]] = {}
+    for intervention in interventions:
+        contacts.setdefault(intervention.student_id, []).append(intervention.occurred_at)
+    if summary["available"]:
+        for message in db.execute(
+            select(EmailMessage.student_id, EmailMessage.sent_at, EmailMessage.queued_at).where(
+                EmailMessage.unit_id == unit_id,
+                EmailMessage.kind == "student_alert",
+                EmailMessage.status == "sent",
+            )
+        ).all():
+            if message[0] is not None:
+                contacts.setdefault(message[0], []).append(message[1] or message[2])
+    deltas = []
+    for student_id, flag_at in flags.items():
+        if flag_at and contacts.get(student_id):
+            first_contact = min(contacts[student_id])
+            deltas.append(max(0, (first_contact - flag_at).total_seconds() / 60))
+    if deltas:
+        summary["median_contact_minutes"] = round(median(deltas), 1)
 
     return summary, per_student
 

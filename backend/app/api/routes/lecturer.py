@@ -14,6 +14,7 @@ opened or refreshed.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, Response, status
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import require_teaching_role
@@ -29,10 +30,12 @@ from app.models.risk_score import RiskScore
 from app.models.student_note import StudentNote
 from app.models.unit import Unit
 from app.models.user import User
+from app.models.watchlist import Watchlist
+from app.schemas.watchlist import WatchlistChange, WatchlistItem
 from app.services import audit_service
 from app.schemas.dashboard import DashboardUnit, LecturerDashboardResponse
+from app.core.checkpoints import DEFAULT_CHECKPOINT_WEEK, available_checkpoints
 from app.services.dashboard_service import (
-    DEFAULT_CHECKPOINT_WEEK,
     get_lecturer_dashboard,
     list_lecturer_units,
 )
@@ -41,6 +44,8 @@ from app.schemas.student_detail import (
     StudentNoteDetail,
     StudentNoteUpdate,
     StudentReviewSubmit,
+    InterventionCreate,
+    InterventionDetail,
 )
 from app.schemas.student_edit import StudentEditPayload
 
@@ -48,6 +53,7 @@ from app.services.student_detail_service import (
     get_student_detail,
     save_student_note,
     submit_student_review,
+    create_intervention,
 )
 from app.services.ingestion_service import build_assessment_event, validate_score
 
@@ -106,6 +112,71 @@ def read_lecturer_units(
     """
     return list_lecturer_units(db, current_user.id)
 
+
+def _watchlist_item(row: Watchlist) -> WatchlistItem:
+    return WatchlistItem(
+        student_id=row.student_id,
+        student_number=row.student.student_number,
+        student_name=row.student.name,
+        unit_id=row.unit_id,
+        unit_code=row.unit.full_code,
+        added_at=row.added_at,
+        reason=row.reason,
+    )
+
+
+@router.get("/watchlist", response_model=list[WatchlistItem])
+def read_watchlist(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_teaching_role()),
+):
+    rows = db.execute(
+        select(Watchlist).where(Watchlist.lecturer_id == current_user.id)
+        .order_by(Watchlist.added_at.desc(), Watchlist.id.desc())
+    ).scalars().all()
+    return [_watchlist_item(row) for row in rows]
+
+
+@router.post("/watchlist", response_model=WatchlistItem, status_code=201)
+def add_watchlist(
+    payload: WatchlistChange,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_teaching_role()),
+):
+    unit = db.execute(select(Unit).where(Unit.id == payload.unit_id, Unit.lecturer_id == current_user.id)).scalars().first()
+    enrolled = db.execute(select(Enrollment).where(Enrollment.student_id == payload.student_id, Enrollment.unit_id == payload.unit_id)).scalars().first()
+    if unit is None or enrolled is None:
+        raise HTTPException(status_code=404, detail="No such student in a unit you teach.")
+    row = db.execute(select(Watchlist).where(
+        Watchlist.lecturer_id == current_user.id,
+        Watchlist.student_id == payload.student_id,
+        Watchlist.unit_id == payload.unit_id,
+    )).scalars().first()
+    if row is None:
+        row = Watchlist(lecturer_id=current_user.id, student_id=payload.student_id, unit_id=payload.unit_id, reason=payload.reason)
+        db.add(row)
+    else:
+        row.reason = payload.reason
+    db.commit()
+    db.refresh(row)
+    return _watchlist_item(row)
+
+
+@router.delete("/watchlist")
+def remove_watchlist(
+    student_id: int = Query(..., ge=1),
+    unit_id: int = Query(..., ge=1),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_teaching_role()),
+):
+    db.execute(delete(Watchlist).where(
+        Watchlist.lecturer_id == current_user.id,
+        Watchlist.student_id == student_id,
+        Watchlist.unit_id == unit_id,
+    ))
+    db.commit()
+    return {"removed": True}
+
 @router.get("/students/{student_id}", response_model=StudentDetailResponse)
 def read_student_detail(
     student_id: int = Path(..., ge=1),
@@ -146,6 +217,70 @@ def read_student_detail(
     return detail
 
 
+@router.get("/students/{student_id}/trajectory", response_model=list[dict])
+def read_student_trajectory(
+    student_id: int = Path(..., ge=1),
+    unit_id: int = Query(..., ge=1),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_teaching_role()),
+):
+    """Return the student's engine and engagement history by checkpoint."""
+    detail = get_student_detail(db, current_user.id, student_id, unit_id, DEFAULT_CHECKPOINT_WEEK)
+    if detail is None:
+        raise HTTPException(status_code=404, detail="No such student in a unit you teach.")
+    criteria = list(db.execute(select(Criteria).where(
+        Criteria.unit_id == unit_id, Criteria.enabled.is_(True)
+    )).scalars())
+    events = list(db.execute(select(AssessmentEvent).where(
+        AssessmentEvent.student_id == student_id, AssessmentEvent.unit_id == unit_id
+    )).scalars())
+    latest = {}
+    for event in sorted(
+        events,
+        key=lambda row: (row.date is not None, row.date, row.id),
+        reverse=True,
+    ):
+        latest.setdefault(event.criteria_id, event)
+    weeks = available_checkpoints(db, unit_id)
+    rows = []
+    for week in weeks:
+        verdict = db.execute(select(FinalVerdict).where(
+            FinalVerdict.student_id == student_id,
+            FinalVerdict.unit_id == unit_id,
+            FinalVerdict.checkpoint_week == week,
+        ).order_by(
+            FinalVerdict.created_at.desc().nullslast(), FinalVerdict.id.desc()
+        ).limit(1)).scalars().first()
+        if verdict is None:
+            continue
+        rule = db.get(RiskScore, verdict.rule_score_id)
+        ml = db.get(RiskScore, verdict.ml_score_id)
+        values = {"attendance_pct": None, "tutorial_pct": None, "assessment_avg": None}
+        assessment_values = []
+        for criterion in criteria:
+            event = latest.get(criterion.id)
+            if event is None or criterion.category is None:
+                continue
+            category = criterion.category.value
+            if category == "attendance" and values["attendance_pct"] is None:
+                values["attendance_pct"] = event.score
+            elif category == "weekly_tut" and values["tutorial_pct"] is None:
+                values["tutorial_pct"] = event.score
+            elif category == "assessment" and criterion.max_score:
+                assessment_values.append(event.score / criterion.max_score * 100)
+        if assessment_values:
+            values["assessment_avg"] = sum(assessment_values) / len(assessment_values)
+        rows.append({
+            "checkpoint_week": week,
+            "rule_tier": rule.risk_level if rule else None,
+            "ml_tier": ml.risk_level if ml else None,
+            "final_tier": verdict.final_tier,
+            "requires_review": verdict.requires_review,
+            **values,
+        })
+    return rows
+
+
 @router.put("/students/{student_id}/note", response_model=StudentNoteDetail)
 def update_student_note(
     payload: StudentNoteUpdate,
@@ -180,6 +315,35 @@ def update_student_note(
         )
 
     return note
+
+
+@router.post("/students/{student_id}/interventions", response_model=InterventionDetail, status_code=201)
+def record_intervention(
+    request: Request,
+    payload: InterventionCreate,
+    student_id: int = Path(..., ge=1),
+    unit_id: int = Query(..., ge=1),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_teaching_role()),
+):
+    intervention = create_intervention(
+        db, current_user.id, student_id, unit_id, payload.model_dump()
+    )
+    if intervention is None:
+        raise HTTPException(status_code=404, detail="No such student in a unit you teach.")
+    audit_service.record(
+        db,
+        action=audit_service.INTERVENTION_RECORDED,
+        actor=current_user,
+        unit=db.get(Unit, unit_id),
+        student=db.get(Student, student_id),
+        entity_type="intervention",
+        summary=f"Recorded {payload.kind} intervention.",
+        after=payload.model_dump(mode="json"),
+        request=request,
+    )
+    db.commit()
+    return intervention
 
 
 @router.post("/students/{student_id}/review", response_model=StudentDetailResponse)

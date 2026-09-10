@@ -16,6 +16,8 @@ import UnitWorkspace from "./pages/UnitWorkspace";
 import UnitOverviewTab from "./pages/unit/UnitOverviewTab";
 import UnitImportTab from "./pages/unit/UnitImportTab";
 import UnitAddStudentTab from "./pages/unit/UnitAddStudentTab";
+import ResetPasswordPage from "./pages/ResetPasswordPage";
+import ModelPerformancePage from "./pages/ModelPerformancePage";
 
 
 /**
@@ -39,6 +41,7 @@ function App() {
     <Routes>
       {/* Login sits outside the shell — no sidebar before sign-in. */}
       <Route path="/login" element={<Login />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
 
       <Route element={<ProtectedRoute />}>
         {/* Available to every signed-in role. */}
@@ -85,6 +88,9 @@ function App() {
             without re-rendering the shell around it. */}
         <Route element={<RoleRoute allowedRoles={["admin"]} />}>
           <Route path="/admin" element={<AdminDashboard />} />
+        </Route>
+        <Route element={<RoleRoute allowedRoles={["admin", "super_admin"]} />}>
+          <Route path="/admin/model" element={<ModelPerformancePage />} />
         </Route>
 
         <Route element={<RoleRoute allowedRoles={["super_admin"]} />}>

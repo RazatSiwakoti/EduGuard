@@ -23,7 +23,7 @@ Sending these on the dashboard payload instead would multiply its size
 for every student a lecturer never opens.
 """
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal, Optional
 
 from pydantic import BaseModel
@@ -113,6 +113,16 @@ class StudentNoteDetail(BaseModel):
     updated_at: Optional[datetime] = None
 
 
+class InterventionDetail(BaseModel):
+    id: str
+    kind: str
+    occurred_at: datetime
+    summary: str
+    outcome: Optional[str] = None
+    follow_up_on: Optional[date] = None
+    automatic: bool = False
+
+
 class StudentDetailResponse(BaseModel):
     """Everything the student card renders, in one request."""
 
@@ -145,6 +155,7 @@ class StudentDetailResponse(BaseModel):
     criteria: list[StudentCriterionDetail] = []
 
     note: Optional[StudentNoteDetail] = None
+    interventions: list[InterventionDetail] = []
 
     # Needed to submit a decision - PATCH .../verdicts/{id}/review takes
     # a verdict id, and until 7.7 no payload the frontend received
@@ -178,3 +189,11 @@ class StudentNoteUpdate(BaseModel):
     """Request body for saving notes. Free text, deliberately."""
 
     body: str
+
+
+class InterventionCreate(BaseModel):
+    kind: Literal["email", "meeting", "phone", "referral", "extension", "other"]
+    occurred_at: datetime
+    summary: str
+    outcome: Optional[Literal["no_response", "acknowledged", "met", "plan_agreed", "escalated"]] = None
+    follow_up_on: Optional[date] = None

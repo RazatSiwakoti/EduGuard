@@ -28,6 +28,7 @@ class User(Base):
 
     # Authentication
     hashed_password = Column(String, nullable=False)
+    password_changed_at = Column(DateTime(timezone=True), nullable=True)
 
     # Authorization
     # No default: every insert must explicitly state a role, or the

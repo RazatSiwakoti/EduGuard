@@ -7,6 +7,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from jose import JWTError
+from datetime import datetime, timezone
 
 from app.database import get_db
 from app.core.auth import decode_access_token
@@ -42,6 +43,15 @@ def get_current_user(
     user = db.query(User).filter(User.id == int(user_id)).first()
     if user is None:
         raise credentials_exception
+
+    issued_at = payload.get("iat")
+    if user.password_changed_at is not None and issued_at is not None:
+        issued = datetime.fromtimestamp(float(issued_at), tz=timezone.utc)
+        changed = user.password_changed_at
+        if changed.tzinfo is None:
+            changed = changed.replace(tzinfo=timezone.utc)
+        if changed >= issued:
+            raise credentials_exception
 
     if not user.is_active:
         raise HTTPException(

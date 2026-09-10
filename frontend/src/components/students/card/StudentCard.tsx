@@ -26,9 +26,11 @@ import {
 } from "../../../utils/studentCard";
 import {
   useSaveStudentNote,
+  useRecordIntervention,
   useStudentDetail,
   useSubmitReview,
 } from "../../../hooks/useStudentDetail";
+import { useStudentTrajectory } from "../../../hooks/useStudentTrajectory";
 import type { RiskTier } from "../../../types/dashboard";
 import { BUCKET_ICONS } from "../../dashboard/BucketBadge";
 import { useBucketStyles } from "../../dashboard/chartTheme";
@@ -38,6 +40,8 @@ import LecturerNotes from "./LecturerNotes";
 import MetricBar from "./MetricBar";
 import ReviewPanel from "./ReviewPanel";
 import TutorialBars from "./TutorialBars";
+import InterventionTimeline from "./InterventionTimeline";
+import RiskTrajectory from "./RiskTrajectory";
 
 interface StudentCardProps {
   target: StudentCardTarget;
@@ -105,7 +109,9 @@ export default function StudentCard({
 }: StudentCardProps) {
   const bucketStyles = useBucketStyles();
   const { data, isLoading, isError, error } = useStudentDetail(target, checkpointWeek);
+  const trajectory = useStudentTrajectory(target.studentId, target.unitId);
   const saveNote = useSaveStudentNote(target, checkpointWeek);
+  const recordIntervention = useRecordIntervention(target, checkpointWeek);
   const submitReview = useSubmitReview(target, checkpointWeek);
 
   const dialogRef = useRef<HTMLDivElement | null>(null);
@@ -341,6 +347,7 @@ export default function StudentCard({
 
           {data && groups && (
             <>
+              {trajectory.data && <RiskTrajectory rows={trajectory.data} />}
               {/* Contact + enrolment. Phone and "last active" from the
                   original design are absent because neither exists in
                   the schema — inventing them would have been the easy
@@ -573,6 +580,12 @@ export default function StudentCard({
                 isSaving={saveNote.isPending}
                 isError={saveNote.isError}
                 justSaved={justSaved}
+              />
+
+              <InterventionTimeline
+                interventions={data.interventions}
+                onRecord={(payload) => recordIntervention.mutate(payload)}
+                isSaving={recordIntervention.isPending}
               />
 
               {/* ------------------------------------------------------ */}

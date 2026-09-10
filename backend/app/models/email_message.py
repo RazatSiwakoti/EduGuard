@@ -43,7 +43,7 @@ class EmailMessage(Base):
 
     id = Column(Integer, primary_key=True, index=True)
 
-    # "student_alert" | "lecturer_summary".
+    # "student_alert" | "lecturer_summary" | "password_reset".
     # Summaries share this table so one log answers "what did this system
     # send" completely, rather than splitting the answer across two
     # places a reader has to know to check.

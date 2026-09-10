@@ -6,6 +6,8 @@ import type {
   StudentNoteDetail,
   StudentReviewSubmit,
   StudentEditPayload,
+  InterventionDetail,
+  InterventionCreate,
 } from "../types/studentDetail";
 
 const KEY = ["lecturer-student-detail"];
@@ -59,6 +61,22 @@ export function useSaveStudentNote(target: StudentCardTarget | null, checkpointW
             ? { ...(current as object), note }
             : current,
       );
+    },
+  });
+}
+
+export function useRecordIntervention(target: StudentCardTarget | null, checkpointWeek = 8) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: InterventionCreate) =>
+      studentDetailService.recordIntervention(target!.studentId, target!.unitId, payload),
+    onSuccess: (intervention: InterventionDetail) => {
+      queryClient.setQueryData(
+        [...KEY, target?.studentId, target?.unitId, checkpointWeek],
+        (current: StudentDetailResponse | undefined) =>
+          current ? { ...current, interventions: [intervention, ...current.interventions] } : current,
+      );
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
     },
   });
 }

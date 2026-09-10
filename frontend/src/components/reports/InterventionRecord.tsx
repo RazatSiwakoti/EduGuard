@@ -150,6 +150,22 @@ export default function InterventionRecord({
             label="Awaiting a decision"
             tone="warning"
           />
+          <Stat value={intervention.interventions_total} label="Recorded interventions" />
+          <Stat
+            value={intervention.median_contact_minutes ?? 0}
+            label="Median minutes to contact"
+            hint={intervention.median_contact_minutes == null ? "not enough contact data" : "from first flag"}
+          />
+          <div className="col-span-2 border-t border-stone-100 px-5 py-4 sm:col-span-4">
+            <p className="text-xs font-medium text-stone-600">Interventions by kind</p>
+            <p className="mt-1 text-xs text-stone-500">
+              {Object.entries(intervention.interventions_by_kind).map(([kind, count]) => `${kind}: ${count}`).join(" · ") || "None recorded"}
+            </p>
+            <p className="mt-3 text-xs font-medium text-stone-600">Outcomes</p>
+            <p className="mt-1 text-xs text-stone-500">
+              {Object.entries(intervention.interventions_by_outcome).map(([outcome, count]) => `${outcome}: ${count}`).join(" · ") || "No outcomes recorded"}
+            </p>
+          </div>
         </div>
       )}
     </section>

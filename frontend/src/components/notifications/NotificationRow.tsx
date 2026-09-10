@@ -5,6 +5,7 @@ import {
   Scale,
   Send,
   Settings2,
+  CalendarClock,
   SlidersHorizontal,
   Upload,
   UserCheck,
@@ -27,6 +28,7 @@ const ICONS: Record<NotificationItem["kind"], LucideIcon> = {
   verdict_overridden: UserCheck,
   unit_unassigned: UserPlus,
   unit_unconfigured: Settings2,
+  follow_up_due: CalendarClock,
 };
 
 export default function NotificationRow({ item }: { item: NotificationItem }) {

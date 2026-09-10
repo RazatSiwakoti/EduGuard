@@ -27,6 +27,8 @@ at all - which is the failure mode the caveats exist to prevent.
 """
 
 from datetime import datetime
+from copy import deepcopy
+import hashlib
 from io import BytesIO
 from typing import Any, Optional
 
@@ -658,13 +660,22 @@ def report_filename(report: dict) -> str:
     return f"{code}_week{report['checkpoint_week']}_report_{stamp}.pdf"
 
 
-def build_report_pdf(report: dict) -> bytes:
+def build_report_pdf(report: dict, *, anonymise: bool = False) -> bytes:
     """
     Render a report dict as PDF bytes.
 
     No Session parameter, deliberately: this renders what C1 computed and
     must not be able to compute anything itself.
     """
+    if anonymise:
+        report = deepcopy(report)
+        for index, row in enumerate(report.get("at_risk") or [], start=1):
+            number = str(row.get("student_number") or row.get("student_id") or index)
+            digest = hashlib.sha256(number.encode("utf-8")).hexdigest()[:12]
+            row["student_number"] = digest
+            row["name"] = f"Student {index:03d}"
+            row["email"] = None
+        report["lecturer_name"] = None
     style = _styles()
     buffer = BytesIO()
 
@@ -697,8 +708,14 @@ def build_report_pdf(report: dict) -> bytes:
 
     story.append(Spacer(1, 14))
     story.append(Paragraph(
-        "This report contains identifiable student information and is intended "
-        "for staff involved in supporting this cohort. Risk tiers are produced "
+        ("This report has pseudonymised student details for sharing outside the "
+         "teaching team." if anonymise else
+         "This report contains identifiable student information and is intended ")
+        + (
+        "" if anonymise else
+        "for staff involved in supporting this cohort. "
+        )
+        + "Risk tiers are produced "
         "by automated analysis and, where marked, by a lecturer resolving a "
         "disagreement between the two engines. They are an indication for "
         "follow-up, not a determination about any student.",

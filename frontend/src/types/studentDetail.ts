@@ -88,6 +88,24 @@ export interface StudentNoteDetail {
   updated_at: string | null;
 }
 
+export interface InterventionDetail {
+  id: string;
+  kind: "email" | "meeting" | "phone" | "referral" | "extension" | "other";
+  occurred_at: string;
+  summary: string;
+  outcome: string | null;
+  follow_up_on: string | null;
+  automatic: boolean;
+}
+
+export interface InterventionCreate {
+  kind: InterventionDetail["kind"];
+  occurred_at: string;
+  summary: string;
+  outcome?: string;
+  follow_up_on?: string;
+}
+
 /** The whole payload from GET /lecturer/students/{id}?unit_id=. */
 export interface StudentDetailResponse {
   student_id: number;
@@ -116,6 +134,7 @@ export interface StudentDetailResponse {
   criteria: StudentCriterionDetail[];
 
   note: StudentNoteDetail | null;
+  interventions: InterventionDetail[];
 
   /** Needed to submit a decision. null when never analysed. */
   verdict_id: number | null;

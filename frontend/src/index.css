@@ -1,111 +1,184 @@
-:root {
-  --text: #6b6375;
-  --text-h: #08060d;
-  --bg: #fff;
-  --border: #e5e4e7;
-  --code-bg: #f4f3ec;
-  --accent: #aa3bff;
-  --accent-bg: rgba(170, 59, 255, 0.1);
-  --accent-border: rgba(170, 59, 255, 0.5);
-  --social-bg: rgba(244, 243, 236, 0.5);
-  --shadow:
-    rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
+/* ------------------------------------------------------------------
+   Fonts
+   Three families, each with a real fallback stack so the interface is
+   readable before they arrive. `display=swap` on all three for the
+   same reason.
+   ------------------------------------------------------------------ */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 
-  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --mono: ui-monospace, Consolas, monospace;
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
 
-  font: 18px/145% var(--sans);
-  letter-spacing: 0.18px;
-  color-scheme: light dark;
-  color: var(--text);
-  background: var(--bg);
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-
-  @media (max-width: 1024px) {
-    font-size: 16px;
-  }
+html {
+  font-size: 16px;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --text: #9ca3af;
-    --text-h: #f3f4f6;
-    --bg: #16171d;
-    --border: #2e303a;
-    --code-bg: #1f2028;
-    --accent: #c084fc;
-    --accent-bg: rgba(192, 132, 252, 0.15);
-    --accent-border: rgba(192, 132, 252, 0.5);
-    --social-bg: rgba(47, 48, 58, 0.5);
-    --shadow:
-      rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
-  }
-
-  #social .button-icon {
-    filter: invert(1) brightness(2);
-  }
+html[data-font-size="small"] {
+  font-size: 14px;
 }
 
+html[data-font-size="large"] {
+  font-size: 18px;
+}
+
+html[data-font-size="larger"] {
+  font-size: 20px;
+}
+
+/* ------------------------------------------------------------------
+   Design tokens, from the Figma design.
+   ADDED ALONGSIDE Tailwind's stone scale, never replacing it. The
+   existing interface is built on `stone` (a warm neutral) and the
+   design's #F6F5F1 page sits naturally beside it; swapping to `gray`
+   or `slate` would cool the whole thing and fight the design.
+   ------------------------------------------------------------------ */
+@theme {
+  --color-brand: #185fa5;
+  --color-brand-deep: #0b3d73;
+  --color-brand-bright: #2e8fd4;
+  --color-brand-wash: #ebf4ff;
+  --color-accent: #ef9f27;
+
+  --color-page: #f6f5f1;
+  --color-surface-alt: #fafaf7;
+  /* Card borders are deliberately near-invisible: the shadow does the
+     separating, and a visible 1px rule around every card turns a page
+     of content into a page of boxes. */
+  --color-hairline: rgba(17, 24, 39, 0.07);
+
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-serif: 'Instrument Serif', 'Times New Roman', serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+  --radius-card: 14px;
+
+  --shadow-card: 0 1px 2px rgba(17, 24, 39, 0.04), 0 1px 10px -6px rgba(17, 24, 39, 0.06);
+  --shadow-card-hover: 0 14px 40px -18px rgba(17, 24, 39, 0.22), 0 2px 6px rgba(17, 24, 39, 0.05);
+}
+
+/* ------------------------------------------------------------------
+   DARK MODE BY TOKEN REASSIGNMENT.
+
+   Components use stone and white utilities, so changing their tokens
+   flips the whole dashboard without editing each component.
+   ------------------------------------------------------------------ */
+.dark {
+  --color-white: #1c1b20;
+  --color-page: #131217;
+  --color-surface-alt: #232227;
+  --color-hairline: rgba(255, 255, 255, 0.08);
+
+  --color-stone-50: #1c1b20;
+  --color-stone-100: #26252b;
+  --color-stone-200: #333138;
+  --color-stone-300: #4a484f;
+  --color-stone-400: #7a7880;
+  --color-stone-500: #9a98a0;
+  --color-stone-600: #b5b3ba;
+  --color-stone-700: #cecbd3;
+  --color-stone-800: #e4e2e7;
+  --color-stone-900: #f4f3f6;
+
+  --color-red-50: #3a1d1d;
+  --color-red-200: #5c2b2b;
+  --color-red-700: #ff9a9a;
+  --color-amber-50: #3a2f16;
+  --color-amber-200: #5c4a22;
+  --color-amber-800: #f5c464;
+  --color-green-50: #16301c;
+  --color-green-200: #24492c;
+  --color-green-700: #7fd991;
+  --color-violet-50: #241f3d;
+  --color-violet-200: #372f5c;
+  --color-violet-700: #b3a7f0;
+  --color-blue-50: #16273d;
+  --color-blue-600: #4d9bf0;
+  --color-blue-700: #7ab6f5;
+  --color-brand-wash: #16273d;
+  --color-brand: #4d9bf0;
+}
+
+/* Inter's stylistic sets: cv11 gives a single-storey a, ss01/ss03 tidy
+   the punctuation. Tabular numerals are set per-element with
+   `tabular-nums`, not globally - proportional figures read better in
+   prose. */
 body {
-  margin: 0;
+  font-family: var(--font-sans);
+  font-feature-settings: 'cv11', 'ss01', 'ss03';
 }
 
-#root {
-  width: 1126px;
-  max-width: 100%;
-  margin: 0 auto;
-  text-align: center;
-  border-inline: 1px solid var(--border);
-  min-height: 100svh;
-  display: flex;
-  flex-direction: column;
-  box-sizing: border-box;
+/* The page texture: two wide brand-tinted gradients and a fractal-noise
+   SVG. This is the single largest visual difference from a flat
+   background, and it costs one class and no JavaScript. Applied by
+   AppShell, not by `body`, so a page that wants a plain ground can
+   simply not use it. */
+.eduguard-page {
+  background-color: var(--color-page);
+  background-image:
+    radial-gradient(1200px 600px at 85% -10%, rgba(24, 95, 165, 0.08), transparent 60%),
+    radial-gradient(900px 500px at -10% 110%, rgba(239, 159, 39, 0.06), transparent 55%),
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.09  0 0 0 0 0.11  0 0 0 0 0.15  0 0 0 0.035 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  background-attachment: fixed;
 }
 
-h1,
-h2 {
-  font-family: var(--heading);
-  font-weight: 500;
-  color: var(--text-h);
+.dark .eduguard-page {
+  background-image:
+    radial-gradient(1200px 600px at 85% -10%, rgba(24, 95, 165, 0.05), transparent 60%),
+    radial-gradient(900px 500px at -10% 110%, rgba(239, 159, 39, 0.05), transparent 55%);
 }
 
-h1 {
-  font-size: 56px;
-  letter-spacing: -1.68px;
-  margin: 32px 0;
-  @media (max-width: 1024px) {
-    font-size: 36px;
-    margin: 20px 0;
+@keyframes eduguard-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes eduguard-card-in {
+  from { opacity: 0; transform: translateY(12px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0)    scale(1); }
+}
+
+/* Motion sensitivity is an accessibility need, not a taste preference,
+   and a scaling overshoot is exactly what triggers it. */
+@media (prefers-reduced-motion: reduce) {
+  @keyframes eduguard-card-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
   }
-}
-h2 {
-  font-size: 24px;
-  line-height: 118%;
-  letter-spacing: -0.24px;
-  margin: 0 0 8px;
-  @media (max-width: 1024px) {
-    font-size: 20px;
-  }
-}
-p {
-  margin: 0;
+} 
+
+/* The OS preference is honoured unconditionally above. This class is
+   the in-app toggle for someone whose OS setting is off but who wants a
+   still interface here - so it adds to that rule, never replaces it. */
+.reduce-motion *,
+.reduce-motion *::before,
+.reduce-motion *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
 }
 
-code,
-.counter {
-  font-family: var(--mono);
-  display: inline-flex;
-  border-radius: 4px;
-  color: var(--text-h);
+/* High contrast lets the border carry separation instead of relying on
+   the subtle shadow and hairline used by the normal theme. */
+.hc {
+  --color-hairline: rgba(17, 24, 39, 0.55);
+  --color-stone-400: #57534e;
+  --color-stone-500: #44403c;
 }
 
-code {
-  font-size: 15px;
-  line-height: 135%;
-  padding: 4px 8px;
-  background: var(--code-bg);
+.dark.hc {
+  --color-hairline: rgba(255, 255, 255, 0.55);
+  --color-stone-400: #c9c7ce;
+  --color-stone-500: #dcdae1;
+}
+
+.hc .eduguard-page {
+  background-image: none;
+}
+
+.hc *:focus-visible {
+  outline: 3px solid var(--color-brand);
+  outline-offset: 2px;
 }

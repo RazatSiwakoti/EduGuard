@@ -33,11 +33,15 @@ from enum import Enum
 
 from app.core.risk_constants import (
     ASSESSMENT_THRESHOLD_FLOOR,
+    FIXED_ATTENDANCE_THRESHOLD,
+    FIXED_MOODLE_THRESHOLD,
     TUTORIAL_THRESHOLD_FLOOR,
     SAFE_CUTOFF,
     HIGH_RISK_CUTOFF,
+    MIN_EVIDENCE_COVERAGE,
     TUTORIAL_STATUS_CREDIT,
 )
+from app.models.enums import CriteriaCategory
 
 
 class RiskTier(str, Enum):
@@ -77,6 +81,38 @@ class RuleEngineResult:
     tier: RiskTier
     combined_score: float
     breakdown: list[CriterionBreakdown]
+
+    # ------------------------------------------------------------------
+    # HOW MUCH EVIDENCE THIS SCORE IS ACTUALLY BASED ON.
+    #
+    # `combined_score` is a weighted average over the criteria that had
+    # data. Without these three fields there is no way to tell a 0.0
+    # earned across every criterion from a 0.0 earned across one of
+    # five - and those two numbers mean opposite things.
+    # ------------------------------------------------------------------
+
+    #: Total weight of every criterion that applies to this unit.
+    total_weight: float = 0.0
+    #: Weight of the criteria that actually had a value.
+    scored_weight: float = 0.0
+
+    @property
+    def coverage(self) -> float:
+        """
+        Share of the unit's weight the score is based on, 0.0 to 1.0.
+
+        1.0 means every applicable criterion had data. Anything less
+        means the blend was rescaled onto a subset, and the smaller this
+        is the less `combined_score` is entitled to be believed.
+        """
+        if self.total_weight <= 0:
+            return 0.0
+        return self.scored_weight / self.total_weight
+
+    @property
+    def has_enough_evidence(self) -> bool:
+        """Whether this score may be reported as a tier at all."""
+        return self.coverage >= MIN_EVIDENCE_COVERAGE
 
 
 def calculate_badness(actual: float, threshold: float) -> float:
@@ -174,18 +210,44 @@ def compute_rule_based_risk(criteria: list[CriterionInput]) -> RuleEngineResult:
     unit, computes each one's badness, blends them by weight, and buckets
     the result into a final tier.
 
-    Criteria with actual=None (structurally absent, e.g. no tutorials) are
-    excluded from BOTH the numerator and denominator - this is what makes
-    weights automatically rescale for units missing a category, with no
-    special-casing required.
+    A criterion with actual=None is excluded from both the numerator and
+    the denominator, so the remaining weights rescale automatically.
+
+    THAT RESCALING IS ONLY SAFE WHEN THE CALLER TELLS YOU HOW MUCH IT
+    RESCALED BY, which is what `total_weight` and `coverage` are for.
+    This function's previous docstring called every None "structurally
+    absent, e.g. no tutorials" and left it there. That is true of a unit
+    with no tutorial criterion - but such a criterion never reaches this
+    list at all, because `build_criterion_inputs` only builds inputs from
+    Criteria rows that EXIST for the unit. So in the real pipeline a None
+    here has only ever meant one thing: this criterion applies and this
+    student has no data for it.
+
+    Rescaling silently over that produced the defect this now reports:
+    a student with no assessment marks was scored across attendance and
+    tutorials alone, earned a perfect 0.0 badness, and was returned SAFE
+    while two thirds of the unit's weight went unexamined. A student with
+    NO data at all scored 0.0 too - because zero is not a neutral value
+    in this scale, it is the best one obtainable.
+
+    The tier is still computed and returned. Deciding whether the
+    evidence is sufficient to ACT on it belongs to the caller - see
+    `has_enough_evidence` and final_verdict_service.
     """
+    
     breakdown: list[CriterionBreakdown] = []
     weighted_badness_sum = 0.0
     total_weight_used = 0.0
+    # Every criterion in this list applies to the unit, whether or not
+    # this student has data for it. That is the denominator coverage is
+    # measured against.
+    total_weight_applicable = sum(criterion.weight for criterion in criteria)
 
     for criterion in criteria:
         if criterion.actual is None:
-            continue  # structurally absent - skip entirely, don't count its weight
+            # No data for this student. Skipped from the blend, but its
+            # weight still counts towards what SHOULD have been scored.
+            continue
 
         badness = calculate_badness(criterion.actual, criterion.threshold)
         weighted_badness_sum += criterion.weight * badness
@@ -210,26 +272,87 @@ def compute_rule_based_risk(criteria: list[CriterionInput]) -> RuleEngineResult:
         tier=bucket_score(combined_score),
         combined_score=combined_score,
         breakdown=breakdown,
+        total_weight=total_weight_applicable,
+        scored_weight=total_weight_used,
     )
 
+#: Floors by CriteriaCategory VALUE, not by an English word.
+#:
+#: This dict was previously keyed "tutorial" while the enum value is
+#: "weekly_tut", so `floors.get("weekly_tut")` returned None and tutorial
+#: thresholds were silently accepted at any value, including zero. The
+#: function had no callers, so nothing ever surfaced it. Keying off the
+#: enum's own values is what stops that recurring.
+THRESHOLD_FLOORS: dict[str, float] = {
+    CriteriaCategory.ASSESSMENT.value: ASSESSMENT_THRESHOLD_FLOOR,
+    CriteriaCategory.WEEKLY_TUT.value: TUTORIAL_THRESHOLD_FLOOR,
+}
 
-def validate_lecturer_threshold(category: str, proposed_threshold: float) -> None:
-    """
-    Enforces the global minimum floor for lecturer-adjustable thresholds.
-    Call this from the Criteria create/update service BEFORE the row is
-    written. Attendance and Moodle should never reach this function since
-    they aren't lecturer-editable at the API layer.
-    """
-    floors = {
-        "assessment": ASSESSMENT_THRESHOLD_FLOOR,
-        "tutorial": TUTORIAL_THRESHOLD_FLOOR,
-    }
+#: Categories whose threshold is a system constant, not a lecturer's
+#: choice. Listed explicitly rather than left to fall through the
+#: floors lookup: "no floor configured" and "not editable at all" are
+#: different rules, and the old code could not tell them apart.
+FIXED_THRESHOLDS: dict[str, float] = {
+    CriteriaCategory.ATTENDANCE.value: FIXED_ATTENDANCE_THRESHOLD,
+    CriteriaCategory.MOODLE.value: FIXED_MOODLE_THRESHOLD,
+}
 
-    floor = floors.get(category.lower())
-    if floor is not None and proposed_threshold < floor:
+#: The default every unit starts at. A lecturer may lower an adjustable
+#: threshold to its floor, never raise it above this.
+DEFAULT_THRESHOLD = 50.0
+
+
+def validate_lecturer_threshold(category, proposed_threshold: float) -> None:
+    """
+    Enforces the rules on a lecturer-set threshold. Raises ValueError.
+
+    Call BEFORE the row is written, from both create and update.
+
+    THREE OUTCOMES, DELIBERATELY DISTINCT:
+
+    - Assessment and weekly tutorials are adjustable DOWNWARD ONLY, from
+      the 50% default to their own floor (45% and 40%). Raising the bar
+      is refused too: a lecturer quietly making their unit harder to
+      pass changes what "at risk" means without anyone being told.
+
+    - Attendance and Moodle are FIXED. Any attempt to change them is
+      refused rather than ignored, because silently discarding a write
+      the caller believes succeeded is worse than an error.
+
+    - A criterion with no category has no floor. It is already reported
+      as a caveat ("invisible to the ML model"); section D2 stops them
+      being created at all.
+
+    Accepts a CriteriaCategory or its string value, so callers do not
+    have to remember which one they are holding.
+    """
+    if category is None:
+        return
+
+    key = getattr(category, "value", category)
+    key = str(key).lower()
+
+    fixed = FIXED_THRESHOLDS.get(key)
+    if fixed is not None:
         raise ValueError(
-            f"{category.title()} threshold cannot be set below {floor}% "
-            f"(proposed: {proposed_threshold}%)."
+            f"The {key.replace('_', ' ')} threshold is fixed at {fixed:g} and "
+            "cannot be changed."
+        )
+
+    floor = THRESHOLD_FLOORS.get(key)
+    if floor is None:
+        return
+
+    if proposed_threshold < floor:
+        raise ValueError(
+            f"Threshold cannot be set below {floor:g}% "
+            f"(proposed: {proposed_threshold:g}%)."
+        )
+
+    if proposed_threshold > DEFAULT_THRESHOLD:
+        raise ValueError(
+            f"Threshold cannot be set above the {DEFAULT_THRESHOLD:g}% default "
+            f"(proposed: {proposed_threshold:g}%)."
         )
 
 def build_rule_explanation(result: RuleEngineResult, top_n: int = 3) -> str:

@@ -19,6 +19,34 @@ class BulkIngestionMapping(BaseModel):
     weekly_criteria_column_map: dict[int, list[str]] = {}
 
 
+class FilePreviewResult(BaseModel):
+    """
+    What the import wizard needs before a lecturer can map anything:
+    the file's actual column headers, and enough sample rows to confirm
+    they picked the right file and that the columns hold what they
+    expect.
+
+    Exists because mapping columns to criteria is impossible until the
+    lecturer can SEE their columns, and the /bulk endpoint requires the
+    mapping and the file in the same request. Parsing here rather than
+    in the browser means .xlsx and .xls work identically to .csv -
+    pandas already handles all three, whereas a browser would need a
+    large extra library just to read a spreadsheet.
+
+    Nothing is written to the database by a preview. It is a pure
+    read-and-describe, so a lecturer can safely try a file, look at it,
+    and change their mind.
+    """
+
+    filename: str
+    columns: list[str]
+    total_rows: int
+    # Capped server-side - a preview only has to prove the file parsed
+    # correctly, and shipping an entire cohort back would defeat the
+    # point of a lightweight preview step.
+    sample_rows: list[dict]
+
+
 class IngestionRowError(BaseModel):
     row: Optional[int] = None
     student_number: Optional[str] = None
@@ -29,7 +57,18 @@ class IngestionRowError(BaseModel):
 class IngestionRowWarning(BaseModel):
     row: Optional[int] = None
     student_number: Optional[str] = None
+    # Declared so a blank-cell warning carries the criteria names as a
+    # field, not only buried in the prose. Pydantic would silently drop
+    # the extra key otherwise, and the frontend could never group
+    # warnings by which mark is missing.
+    criteria: Optional[str] = None
     message: str
+
+
+class IncompleteStudent(BaseModel):
+    student_number: str
+    name: str
+    missing: list[str]
 
 
 class StudentAnalysisResult(BaseModel):
@@ -57,6 +96,8 @@ class BulkIngestionResult(BaseModel):
     filename: str
     errors: list[IngestionRowError]
     warnings: list[IngestionRowWarning]
+    incomplete_students: list[IncompleteStudent] = []
+    incomplete_count: int = 0
     analysis_summary: Optional[AnalysisSummary] = None
 
 
@@ -85,3 +126,5 @@ class ManualEntryResult(BaseModel):
     errors: list[IngestionRowError]
     warnings: list[IngestionRowWarning]
     analysis_result: Optional[StudentAnalysisResult] = None
+    student_created: bool = False
+    enrollment_created: bool = False

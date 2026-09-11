@@ -9,6 +9,10 @@ from pydantic import BaseModel
 
 class VerdictReviewSubmit(BaseModel):
     review_decision: Literal["safe", "low_risk", "high_risk"]
+    # Optional justification, stored on the VerdictReview row. Added in
+    # 7.7 with a default so existing callers of this endpoint keep
+    # working without sending it.
+    comment: Optional[str] = None
 
 
 class PendingReviewItem(BaseModel):

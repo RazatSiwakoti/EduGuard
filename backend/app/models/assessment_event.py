@@ -17,7 +17,7 @@ batch_id is nullable: bulk-uploaded rows point to the IngestionBatch
 they came from; manually entered single rows have no batch and stay
 NULL - there's no file to group them under.
 """
-from sqlalchemy import Column, Integer, Float, DateTime, ForeignKey, Enum
+from sqlalchemy import Column, Integer, Float, DateTime, ForeignKey, Enum, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.models.base import Base
@@ -59,3 +59,4 @@ class AssessmentEvent(Base):
     criteria = relationship("Criteria")
     creator = relationship("User")
     batch = relationship("IngestionBatch", back_populates="assessment_events")
+    weekly_values = Column(JSON, nullable=True)  

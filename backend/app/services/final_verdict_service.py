@@ -8,11 +8,14 @@ their manual decision. Does NOT commit - the calling route owns the
 transaction boundary.
 """
 
-from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 
+from typing import Optional
+
+from app.core.risk_constants import MIN_EVIDENCE_COVERAGE
 from app.models.risk_score import RiskScore
 from app.models.final_verdicts import FinalVerdict
+from app.models.verdict_review import VerdictReview
 from app.services.rule_engine import RiskTier
 from app.services.hybrid_engine import reconcile
 
@@ -33,16 +36,132 @@ def get_latest_score(db: Session, student_id: int, unit_id: int, source: str, ch
     )
 
 
+def not_scoreable(score: RiskScore) -> bool:
+    """
+    Whether this engine saw too little of the student to state a tier.
+
+    NULL coverage returns False, and that is deliberate rather than
+    cautious-by-default. Every score computed before the coverage column
+    existed has NULL, and treating "not measured" as "insufficient"
+    would push every historical student into the review queue the moment
+    this shipped - thousands of rows nobody can action, which is how a
+    review queue becomes something people close without reading. Those
+    verdicts stay exactly as they were until the next analysis run
+    measures them properly.
+    """
+    return bool(score.is_incomplete) or (
+        score.coverage is not None and score.coverage < MIN_EVIDENCE_COVERAGE
+    )
+
+
+# Backward-compatible import for callers outside the production call sites.
+insufficient_evidence = not_scoreable
+
+
+def describe_coverage(score: RiskScore) -> str:
+    """A phrase naming what this engine did not see."""
+    if score.missing_criteria:
+        return f"{score.source} has no data for {score.missing_criteria}"
+    share = f"{(score.coverage or 0.0) * 100:.0f}%"
+    return f"{score.source} scored only {share} of the evidence (missing: some criteria)"
+
+
 def build_reason(rule_score: RiskScore, ml_score: RiskScore, requires_review: bool) -> str:
     """Combines both engines' own stored explanations into one final
     reason. If review is required, that's stated up front."""
     combined = f"{rule_score.explanation or ''} {ml_score.explanation or ''}".strip()
+
+    # TWO DIFFERENT REASONS FOR THE SAME OUTCOME, and a lecturer opening
+    # the queue needs to know which one they are looking at. "The engines
+    # disagreed" is a question about the model; "half this student's
+    # record is missing" is a question about the data, and only one of
+    # them is answered by looking harder at the student.
+    thin = [score for score in (rule_score, ml_score) if not_scoreable(score)]
+    if thin:
+        return (
+            "Missing data. Not enough evidence to state a risk level: "
+            + "; ".join(describe_coverage(score) for score in thin)
+            + ". A missing mark is not a passing mark, so no tier is claimed. "
+            + combined
+        ).strip()
+
     if requires_review:
         return (
             f"Rule engine ({rule_score.risk_level}) and ML model ({ml_score.risk_level}) "
             f"disagree significantly - needs lecturer review. {combined}"
         ).strip()
     return combined
+
+
+def get_latest_review(
+    db: Session, student_id: int, unit_id: int, checkpoint_week: int
+) -> Optional[VerdictReview]:
+    """
+    The most recent review a lecturer recorded for this student, unit and
+    checkpoint - regardless of which engine pair it was about.
+
+    verdict_reviews is append-only, so "changed their mind" is a newer
+    row rather than an edit, and latest-wins is the same rule every other
+    append-only table here follows. Ties break on id DESC as well as
+    created_at, because two submissions inside the same second would
+    otherwise be ordered arbitrarily.
+    """
+    return (
+        db.query(VerdictReview)
+        .filter(
+            VerdictReview.student_id == student_id,
+            VerdictReview.unit_id == unit_id,
+            VerdictReview.checkpoint_week == checkpoint_week,
+        )
+        .order_by(VerdictReview.created_at.desc(), VerdictReview.id.desc())
+        .first()
+    )
+
+
+def review_still_applies(
+    review: Optional[VerdictReview], rule_tier: str, ml_tier: str
+) -> bool:
+    """
+    Whether a past decision can be carried onto a fresh verdict.
+
+    A review resolved a SPECIFIC disagreement - "rule says safe, model
+    says high risk, and I side with safe". If both engines still say
+    exactly that, the lecturer's judgement is about the same situation
+    and re-asking them would be pointless noise; at 300 students, one
+    "Run Analysis" would reset a queue they had just spent an hour
+    clearing.
+
+    If EITHER tier has moved, the disagreement is a different one. The
+    old decision was never made about this situation, so carrying it
+    forward would put a lecturer's name against a verdict on data they
+    have not seen. Those go back in the queue, and the card shows what
+    changed instead of silently re-asking.
+    """
+    if review is None:
+        return False
+    return review.rule_tier == rule_tier and review.ml_tier == ml_tier
+
+
+def apply_review_to_verdict(verdict: FinalVerdict, review: VerdictReview) -> None:
+    """
+    Stamps a lecturer's decision onto a verdict.
+
+    Writes both the FK and the denormalised copy on final_verdicts. The
+    copy exists so the risk router's VerdictReviewResult and anything
+    reading that table directly keep working; the FK is what lets any
+    screen answer "is there a human standing behind this tier" without
+    a second query.
+
+    Used for BOTH paths - a decision submitted just now, and one carried
+    forward onto a fresh verdict - so the two can never drift into
+    setting different fields.
+    """
+    verdict.final_tier = review.decision
+    verdict.requires_review = False
+    verdict.reviewed_by = review.reviewed_by
+    verdict.review_decision = review.decision
+    verdict.reviewed_at = review.created_at
+    verdict.review_id = review.id
 
 
 def compute_and_stage_final_verdict(
@@ -52,6 +171,13 @@ def compute_and_stage_final_verdict(
     Full pipeline: fetch both engines' latest scores -> reconcile ->
     stage a FinalVerdict row. Raises ValueError if either engine hasn't
     scored this student yet - a verdict needs BOTH inputs to exist.
+
+    CARRY-FORWARD (Phase 7.7). This checks whether a human already decided
+    this exact engine pair. If so the decision is applied and the student
+    never re-enters the queue, even when the engines now agree. Before this
+    existed, every "Run Analysis" silently discarded every review ever made -
+    the verdict row carrying the decision was superseded, and every read
+    takes the latest.
     """
     rule_score = get_latest_score(db, student_id, unit_id, "rule_based", checkpoint_week)
     ml_score = get_latest_score(db, student_id, unit_id, "ml_model", checkpoint_week)
@@ -63,43 +189,136 @@ def compute_and_stage_final_verdict(
 
     hybrid_result = reconcile(RiskTier(rule_score.risk_level), RiskTier(ml_score.risk_level))
 
+    # THE COVERAGE GATE.
+    #
+    # Both engines rescale their blend onto whatever evidence exists, so
+    # a student with no assessment marks is scored across attendance and
+    # tutorials alone and can earn a perfect result on two thirds of a
+    # unit nobody looked at. The tiers above are computed from real
+    # numbers; they are simply not entitled to be believed.
+    #
+    # This routes those students into the review workflow that already
+    # exists for engine disagreement - same violet bucket, same queue,
+    # same lecturer decision, same carry-forward. Nothing new to build,
+    # and a human decides instead of the system guessing "safe".
+    #
+    # It can only ever ADD a review, never remove one: a genuine
+    # disagreement stays a disagreement.
+    is_missing_data = not_scoreable(rule_score) or not_scoreable(ml_score)
+    starved = is_missing_data
+    requires_review = hybrid_result.requires_review or starved
+    final_tier = None if requires_review else hybrid_result.final_tier
+
     verdict = FinalVerdict(
         student_id=student_id,
         unit_id=unit_id,
         checkpoint_week=checkpoint_week,
         rule_score_id=rule_score.id,
         ml_score_id=ml_score.id,
-        final_tier=hybrid_result.final_tier.value if hybrid_result.final_tier else None,
-        requires_review=hybrid_result.requires_review,
-        reason=build_reason(rule_score, ml_score, hybrid_result.requires_review),
+        final_tier=final_tier.value if final_tier else None,
+        requires_review=requires_review,
+        is_missing_data=is_missing_data,
+        reason=build_reason(rule_score, ml_score, requires_review),
     )
+
+    # A matching manual decision supersedes the engine result, including
+    # when the engines agree. review_still_applies prevents applying it to
+    # a different engine pair.
+    review = get_latest_review(db, student_id, unit_id, checkpoint_week)
+    if review_still_applies(review, rule_score.risk_level, ml_score.risk_level):
+        apply_review_to_verdict(verdict, review)
+
     db.add(verdict)
     return verdict
 
 
-def submit_review_decision(db: Session, verdict_id: int, reviewer_id: int, decision: str) -> FinalVerdict:
+def record_review(
+    db: Session,
+    student_id: int,
+    unit_id: int,
+    checkpoint_week: int,
+    reviewer_id: int,
+    decision: str,
+    comment: Optional[str],
+    verdict: FinalVerdict,
+) -> VerdictReview:
     """
-    Resolves a pending FinalVerdict with a lecturer's manual decision.
+    Records a lecturer's decision and applies it to the current verdict.
 
-    Guard order matters here: reviewed_by is checked FIRST, since a
-    successful review always sets requires_review=False too - checking
-    requires_review first would mask an already-reviewed verdict behind
-    a misleading "didn't require review" message.
+    APPEND-ONLY. A lecturer changing their mind writes a NEW row; the
+    previous decision is never overwritten. That makes a misclick
+    fixable - the old code raised outright if reviewed_by was already
+    set, so a wrong click was permanent and unfixable from anywhere in
+    the app - while keeping the fact that it happened. "Resolved as high
+    risk, changed to safe forty minutes later" is exactly what an audit
+    of an early-warning system should be able to see.
+
+    The engine tiers are read off the verdict's OWN score rows via the
+    foreign keys, never re-queried as "latest score for this student".
+    Those two can diverge, and a review stamped with tiers that did not
+    produce the disagreement being resolved would carry forward onto the
+    wrong future situations.
+    """
+    rule_score = db.query(RiskScore).filter(RiskScore.id == verdict.rule_score_id).first()
+    ml_score = db.query(RiskScore).filter(RiskScore.id == verdict.ml_score_id).first()
+
+    if not rule_score or not ml_score:
+        raise ValueError(
+            "This verdict's engine scores are missing - it cannot be reviewed"
+        )
+
+    review = VerdictReview(
+        student_id=student_id,
+        unit_id=unit_id,
+        checkpoint_week=checkpoint_week,
+        decision=decision,
+        # Empty strings become NULL: an untouched textarea should not be
+        # stored as a justification the lecturer never wrote.
+        comment=(comment or "").strip() or None,
+        reviewed_by=reviewer_id,
+        rule_tier=rule_score.risk_level,
+        ml_tier=ml_score.risk_level,
+    )
+    db.add(review)
+    # Needed before apply_review_to_verdict can set the FK - the row has
+    # no id until it reaches the database.
+    db.flush()
+
+    apply_review_to_verdict(verdict, review)
+    return review
+
+
+def submit_review_decision(
+    db: Session,
+    verdict_id: int,
+    reviewer_id: int,
+    decision: str,
+    comment: Optional[str] = None,
+) -> FinalVerdict:
+    """
+    Resolves a FinalVerdict with a lecturer's manual decision.
+
+    Kept as the single write path so the older
+    PATCH /units/{id}/risk/verdicts/{id}/review endpoint and the newer
+    per-student one produce identical state. Two write paths to the same
+    fields is how a denormalised copy drifts from its source of truth.
+
+    NO LONGER REFUSES AN ALREADY-REVIEWED VERDICT. Reviews are append-only
+    now, so a second decision supersedes the first rather than colliding
+    with it.
     """
     verdict = db.query(FinalVerdict).filter(FinalVerdict.id == verdict_id).first()
     if not verdict:
         raise ValueError(f"FinalVerdict {verdict_id} not found")
 
-    if verdict.reviewed_by is not None:
-        raise ValueError(f"FinalVerdict {verdict_id} has already been reviewed")
-
-    if not verdict.requires_review:
-        raise ValueError(f"FinalVerdict {verdict_id} did not require review - nothing to resolve")
-
-    verdict.final_tier = decision
-    verdict.requires_review = False
-    verdict.reviewed_by = reviewer_id
-    verdict.review_decision = decision
-    verdict.reviewed_at = datetime.now(timezone.utc)
-
+    record_review(
+        db,
+        verdict.student_id,
+        verdict.unit_id,
+        verdict.checkpoint_week,
+        reviewer_id,
+        decision,
+        comment,
+        verdict,
+    )
     return verdict

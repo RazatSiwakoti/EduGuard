@@ -11,7 +11,7 @@ max_score defines the maximum possible value for this criterion (e.g. 20 for a q
 from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey, Enum
 from sqlalchemy.orm import relationship
 from app.models.base import Base
-from app.models.enums import CriteriaCategory
+from app.models.enums import AssessmentKind, CriteriaCategory
 
 
 class Criteria(Base):
@@ -37,6 +37,19 @@ class Criteria(Base):
         nullable=True,
     )
     sequence_number = Column(Integer, nullable=True)  # only meaningful for ASSESSMENT
+
+    # Section T2. Quiz or assignment - null for every other category.
+    # Separate from `category` ON PURPOSE: `category` is the ML contract
+    # and keeps its four values, so adding kinds here cannot drop an
+    # assessment out of a scoring branch that matches on ASSESSMENT.
+    kind = Column(
+        Enum(
+            AssessmentKind,
+            name="assessmentkind",
+            values_callable=lambda enum_cls: [member.value for member in enum_cls],
+        ),
+        nullable=True,
+    )
 
     enabled = Column(Boolean, default=True)
 

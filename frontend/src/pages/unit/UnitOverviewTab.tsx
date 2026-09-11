@@ -1,0 +1,200 @@
+import { Link, useOutletContext } from "react-router-dom";
+import { CircleAlert, Lock, Plus, Upload, UserPlus } from "lucide-react";
+import type { UnitTabContext } from "../UnitWorkspace";
+import { useUnitCriteria } from "../../hooks/useLecturerUnits";
+import { CATEGORY_COLUMN_COUNT, FIXED_CATEGORIES } from "../../types/criteria";
+import type { CriteriaCategory } from "../../types/criteria";
+import { CATEGORY_LABELS } from "../../utils/dashboardAggregations";
+import UnitCompositionPanel from "../../components/criteria/UnitCompositionPanel";
+
+/**
+ * What this unit is marked on, and what to do next.
+ *
+ * TWO SECTIONS THAT LOOK SIMILAR AND ARE NOT
+ * ------------------------------------------
+ * `UnitCompositionPanel` (section T4) answers "what is this unit worth
+ * and where is the pass mark" — the coordinator's shape, the derived
+ * pass marks, and the two sliders the lecturer owns.
+ *
+ * The list below answers a different question: "what must my
+ * spreadsheet contain". It covers all four categories including
+ * attendance and Moodle, which are outside the 100% and therefore
+ * absent from the panel above, and it carries the column counts —
+ * exactly 7 attendance values, exactly 6 tutorial values — that
+ * `calculate_attendance_trend` and
+ * `calculate_tutorial_completion_trend` return None without. Getting
+ * that wrong still produces a percentage and silently loses the trend
+ * the momentum chart depends on.
+ *
+ * The weight and threshold numbers that used to sit on the right of
+ * every row here have moved into the panel, where they appear beside
+ * the pass mark they produce. Two places showing the same threshold was
+ * one place too many the moment a slider could change it.
+ */
+export default function UnitOverviewTab() {
+  const { unit } = useOutletContext<UnitTabContext>();
+  const { data: criteria, isLoading, isError } = useUnitCriteria(unit.id);
+
+  const list = criteria ?? [];
+
+  // Attendance and Moodle are seeded automatically by
+  // seed_default_criteria(). Anything beyond those two had to be
+  // created by a lecturer, which is exactly what "is this unit
+  // configured yet" means.
+  const custom = list.filter(
+    (c) => !c.category || !FIXED_CATEGORIES.includes(c.category),
+  );
+
+  return (
+    <div className="space-y-6">
+      <UnitCompositionPanel unitId={unit.id} />
+
+      <section className="rounded-lg border border-stone-200 bg-white p-5">
+        <header className="mb-4 flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-sm font-semibold text-stone-900">
+              Data this unit accepts
+            </h2>
+            <p className="mt-0.5 text-xs leading-relaxed text-stone-500">
+              What an import can map onto, and how many spreadsheet columns each
+              one needs.
+            </p>
+          </div>
+        </header>
+
+        {isLoading && (
+          <div className="animate-pulse space-y-2">
+            {[0, 1, 2].map((index) => (
+              <div key={index} className="h-12 rounded bg-stone-100" />
+            ))}
+          </div>
+        )}
+
+        {isError && (
+          <p className="py-4 text-center text-sm text-stone-500">
+            Couldn't load this unit's criteria.
+          </p>
+        )}
+
+        {!isLoading && !isError && (
+          <>
+            <ul className="divide-y divide-stone-100">
+              {list.map((criterion) => {
+                const category = criterion.category as CriteriaCategory | null;
+                const columns = category ? CATEGORY_COLUMN_COUNT[category] : null;
+                const isFixed = category ? FIXED_CATEGORIES.includes(category) : false;
+                const label = category
+                  ? CATEGORY_LABELS[category] ?? category
+                  : "Uncategorised";
+
+                return (
+                  <li
+                    key={criterion.id}
+                    className="flex flex-wrap items-center gap-x-4 gap-y-1 py-3"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="flex items-center gap-2 text-sm font-medium text-stone-900">
+                        {criterion.name}
+                        {isFixed && (
+                          <span
+                            title="Tracked automatically for every unit — no marks or pass mark to set"
+                            className="inline-flex items-center gap-1 rounded bg-stone-100 px-1.5 py-0.5 text-[0.625rem] font-medium uppercase tracking-wide text-stone-500"
+                          >
+                            <Lock className="h-2.5 w-2.5" aria-hidden="true" />
+                            Fixed
+                          </span>
+                        )}
+                        {!criterion.enabled && (
+                          <span className="rounded bg-stone-100 px-1.5 py-0.5 text-[0.625rem] font-medium uppercase tracking-wide text-stone-400">
+                            Disabled
+                          </span>
+                        )}
+                      </p>
+                      <p className="mt-0.5 text-xs text-stone-500">
+                        {/* The category label is dropped when it just
+                            repeats the name — "Attendance · Attendance
+                            · needs exactly 7 columns" was the row this
+                            section rendered before. */}
+                        {label !== criterion.name && `${label} · `}
+                        {/* Column count is the single most useful fact
+                            here — it is what the lecturer must satisfy
+                            in their spreadsheet, and getting it wrong
+                            silently drops the trend value. */}
+                        {columns
+                          ? `needs exactly ${columns} columns`
+                          : "single column"}
+                      </p>
+                    </div>
+
+                  </li>
+                );
+              })}
+            </ul>
+
+            {/* The blocking condition for import, stated plainly. */}
+            {custom.length === 0 && (
+              <div className="mt-4 flex gap-3 rounded-md border border-dashed border-amber-300 bg-amber-50 p-4">
+                <CircleAlert
+                  className="mt-0.5 h-4 w-4 shrink-0 text-amber-600"
+                  aria-hidden="true"
+                />
+                <div className="text-xs leading-relaxed text-amber-900">
+                  <p className="font-medium">
+                    No assignment or tutorial criteria defined yet.
+                  </p>
+                  <p className="mt-1">
+                    This unit can currently only accept attendance and Moodle data. You
+                    can create the missing criteria from your spreadsheet's columns
+                    during import — the wizard offers it at the mapping step.
+                  </p>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </section>
+
+      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <ActionCard
+          to={`/units/${unit.id}/import`}
+          icon={Upload}
+          title="Import cohort data"
+          description="Upload a CSV or Excel file and map its columns to this unit's criteria."
+        />
+        <ActionCard
+          to={`/units/${unit.id}/add-student`}
+          icon={UserPlus}
+          title="Add a single student"
+          description="Enter one student and their scores by hand, without a file."
+        />
+      </section>
+    </div>
+  );
+}
+
+interface ActionCardProps {
+  to: string;
+  icon: typeof Plus;
+  title: string;
+  description: string;
+}
+
+/** A next step, presented as a large target rather than a small button. */
+function ActionCard({ to, icon: Icon, title, description }: ActionCardProps) {
+  return (
+    <Link
+      to={to}
+      className="flex gap-3 rounded-lg border border-stone-200 bg-white p-5 transition hover:border-stone-300 hover:shadow-sm"
+    >
+      <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-stone-50 text-stone-500">
+        <Icon className="h-4 w-4" aria-hidden="true" />
+      </span>
+      <span className="min-w-0">
+        <span className="block text-sm font-medium text-stone-900">{title}</span>
+        <span className="mt-1 block text-xs leading-relaxed text-stone-500">
+          {description}
+        </span>
+      </span>
+    </Link>
+  );
+}

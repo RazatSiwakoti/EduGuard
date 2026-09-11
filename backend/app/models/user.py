@@ -8,7 +8,7 @@ forgets to pass `role` fails loudly (IntegrityError) instead of
 silently creating a Lecturer - fail closed, not fail open.
 """
 
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Enum
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Enum, Text, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -24,9 +24,11 @@ class User(Base):
     # Identity
     email = Column(String, unique=True, index=True, nullable=False)
     full_name = Column(String, nullable=False)
+    avatar = Column(Text, nullable=True)  # Never a filesystem path; a data:image/webp;base64,... string or NULL.
 
     # Authentication
     hashed_password = Column(String, nullable=False)
+    password_changed_at = Column(DateTime(timezone=True), nullable=True)
 
     # Authorization
     # No default: every insert must explicitly state a role, or the
@@ -41,6 +43,7 @@ class User(Base):
     )
 
     is_active = Column(Boolean, default=True)
+    preferences = Column(JSON, nullable=False, server_default="{}")
 
     # Audit fields
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -51,7 +54,13 @@ class User(Base):
         onupdate=func.now(),
     )
     last_login = Column(DateTime(timezone=True), nullable=True)
+    notifications_seen_at = Column(DateTime(timezone=True), nullable=True)
 
     # relationships
-    units = relationship("Unit", back_populates="lecturer")
+    #foreign keys is required since Unit gained `criteria_unlocked_by (section T1) - Unit now has TWO foreign keys to users.id, and
+   # without this SQLAlchemy cannot decide which one means "teaches".
+    units = relationship(
+        "Unit", back_populates="lecturer", foreign_keys="Unit.lecturer_id"
+    ) 
+
     rule_versions = relationship("RuleVersion", back_populates="creator")

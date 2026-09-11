@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Your EduGuard record</title>
+  <style>
+    body{margin:0;padding:28px 16px;background:#f5f5f4;color:#1c1917;font:15px/1.55 system-ui,sans-serif}
+    main{max-width:680px;margin:auto;background:white;border:1px solid #e7e5e4;border-radius:16px;padding:28px}
+    h1{font-size:22px;margin:0 0 4px} h2{font-size:16px;margin:24px 0 8px}
+    .muted{color:#78716c;font-size:13px}.card{border:1px solid #e7e5e4;border-radius:10px;padding:12px 14px;margin:8px 0}
+    table{width:100%;border-collapse:collapse}td,th{text-align:left;padding:8px;border-bottom:1px solid #e7e5e4}
+  </style>
+</head>
+<body><main>
+  <h1>Your learning record</h1>
+  <p class="muted">{{ student.name }} · {{ unit.full_code or unit.unit_code }}{% if unit.unit_name %} · {{ unit.unit_name }}{% endif %}</p>
+  <p>These are the current records held for you. This page does not show a risk label or prediction.</p>
+  <h2>Attendance and tutorials</h2>
+  <div class="card">
+    {% for item in metrics %}
+      <div><strong>{{ item.label }}</strong>: {{ item.value }}</div>
+    {% else %}<span class="muted">No attendance or tutorial record is available.</span>{% endfor %}
+  </div>
+  <h2>Marks and pass marks</h2>
+  <table><thead><tr><th>Assessment</th><th>Mark</th><th>Pass mark</th></tr></thead><tbody>
+    {% for item in assessments %}<tr><td>{{ item.name }}</td><td>{{ item.score }}</td><td>{{ item.threshold }}</td></tr>
+    {% else %}<tr><td colspan="3" class="muted">No assessment records are available.</td></tr>{% endfor %}
+  </tbody></table>
+  {% if interventions %}<h2>Support</h2>{% for item in interventions %}<div class="card">{{ item }}</div>{% endfor %}{% endif %}
+  <p class="muted">EduGuard · this private link expires {{ expires_at }}</p>
+</main></body></html>

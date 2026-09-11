@@ -54,6 +54,7 @@ def resolve_or_create_student(
     caller to report. If not found, a new Student is created - name is
     required in this case since Student.name is NOT NULL at the DB level.
     """
+    student_number = str(student_number).strip()
     student = db.query(Student).filter(Student.student_number == student_number).first()
 
     if student:
@@ -75,10 +76,25 @@ def resolve_or_create_student(
                 f"Student {student_number} details differ from upload: "
                 f"{', '.join(mismatches)} - record was NOT updated."
             )
+
+        if email and not email.lower().endswith("@students.koi.edu.au"):
+            extra = (
+                f"Student {student_number} email '{email}' is not a KOI student address "
+                "and was left unchanged."
+            )
+            warning = f"{warning} {extra}" if warning else extra
+
         return student, warning
 
     if not name:
         raise ValueError(f"Cannot create new student '{student_number}': name is required")
+
+    warning = None
+    if email and not email.lower().endswith("@students.koi.edu.au"):
+        warning = (
+            f"Student {student_number} email '{email}' is not a KOI student address "
+            "and was kept as provided."
+        )
 
     student = Student(
         student_number=student_number, name=name, email=email,
@@ -86,7 +102,7 @@ def resolve_or_create_student(
     )
     db.add(student)
     db.flush()  # need student.id for enrollment/event creation below
-    return student, None
+    return student, warning
 
 
 def resolve_or_create_enrollment(db: Session, student_id: int, unit_id: int) -> Enrollment:
@@ -138,16 +154,25 @@ def build_assessment_event(
     student: Student, unit_id: int, criteria: Criteria, score: float,
     source: EventSource, created_by: int, batch_id: Optional[int] = None,
     trend_value: Optional[float] = None,
+    weekly_values: Optional[list] = None,
 ) -> AssessmentEvent:
     """Stages one immutable raw data point. Never call this to 'fix' an
-    existing row - always creates a new one. trend_value is only ever
-    set for Attendance/Weekly Tut events; None for everything else."""
+    existing row - always creates a new one. trend_value and
+    weekly_values are only ever set for Attendance/Weekly Tut events;
+    None for everything else.
+
+    weekly_values carries the NORMALISED cells the score was aggregated
+    from, so the per-week detail survives instead of being thrown away
+    (Phase 7.6b). It stays on this row, which means a corrected event
+    carries its own weekly list and the old one is superseded rather
+    than mutated - the same immutability every other field here has."""
     return AssessmentEvent(
         student_id=student.id,
         unit_id=unit_id,
         criteria_id=criteria.id,
         score=score,
         trend_value=trend_value,
+        weekly_values=weekly_values,
         source=source,
         created_by=created_by,
         batch_id=batch_id,
@@ -198,8 +223,12 @@ def build_weekly_criterion_event(
     Aggregates a student's raw weekly cells (Attendance or Weekly Tut)
     into ONE completion percentage AND one trend value, using the exact
     same functions the rule engine and ML training notebook use, then
-    stages both on one AssessmentEvent row. Raw weekly values are NOT
-    persisted separately - only score and trend_value.
+    stages both on one AssessmentEvent row.
+
+    Since Phase 7.6b the NORMALISED weekly cells are also stored on that
+    row (weekly_values), so the student card can draw a real week-by-week
+    chart. The aggregate remains what every engine reads - nothing about
+    scoring changed, this is an additional record of the input.
 
     Used identically by bulk upload (values from CSV columns) and
     manual entry (values typed directly) - same function, same result,
@@ -216,17 +245,30 @@ def build_weekly_criterion_event(
         weekly_bools = [parse_attendance_cell(v) for v in weekly_raw_values]
         score = calculate_attendance_pct(weekly_bools)
         trend = calculate_attendance_trend(weekly_bools)
+        # The NORMALISED cells, not the raw ones. "Y", "yes" and "1" all
+        # mean the same thing to the engines, so storing the parsed form
+        # keeps the chart consistent no matter how the file was written.
+        normalised = weekly_bools
     elif criteria.category == CriteriaCategory.WEEKLY_TUT:
         weekly_statuses = [parse_tutorial_cell(v) for v in weekly_raw_values]
         score = calculate_tutorial_completion_pct(weekly_statuses)
         trend = calculate_tutorial_completion_trend(weekly_statuses)
+        normalised = weekly_statuses
     else:
         raise ValueError(
             f"build_weekly_criterion_event called with unsupported category: {criteria.category}"
         )
 
     return build_assessment_event(
-        student, unit_id, criteria, score, source, created_by, batch_id, trend_value=trend
+        student,
+        unit_id,
+        criteria,
+        score,
+        source,
+        created_by,
+        batch_id,
+        trend_value=trend,
+        weekly_values=normalised,
     )
 
 
@@ -251,7 +293,8 @@ def process_bulk_upload(
     weekly_criteria_column_map: Optional[dict[int, list[str]]] = None,
     gender_col: Optional[str] = None,
     age_col: Optional[str] = None,
-) -> tuple[IngestionBatch, list[dict], list[dict], set[int]]:
+    include_incomplete_students: bool = False,
+) -> tuple:
     """
     rows: one dict per CSV/Excel row, keyed by the file's original column
     headers.
@@ -275,11 +318,14 @@ def process_bulk_upload(
 
     errors: list[dict] = []
     warnings: list[dict] = []
+    incomplete_students: list[dict] = []
     success_count = 0
     touched_student_ids: set[int] = set()
 
     for row_number, row in enumerate(rows, start=1):
         student_number = row.get(student_number_col)
+        if student_number is not None:
+             student_number = str(student_number).strip()
         name = row.get(name_col)
         email = row.get(email_col) if email_col else None
         program = row.get(program_col) if program_col else None
@@ -303,9 +349,26 @@ def process_bulk_upload(
 
         resolve_or_create_enrollment(db, student.id, unit_id)
 
+        # Every criterion this row left blank, collected across the loop
+        # and reported as ONE warning after it.
+        #
+        # One warning per empty cell would put four lines on screen for a
+        # student who is simply early in the trimester, and a warning
+        # panel that long is scrolled past rather than read. The criteria
+        # names are what the lecturer acts on, so they are joined into a
+        # single sentence naming the student once.
+        blank_criteria: list[str] = []
+
         for criteria_id, column_name in criteria_column_map.items():
             raw_value = row.get(column_name)
             if raw_value in (None, ""):
+                # NOT an error, and the row is NOT rejected. An empty
+                # assessment cell in week 4 is the ordinary state of a
+                # trimester, not a broken file. It is recorded because
+                # the scoring engines now refuse to state a tier without
+                # enough evidence, and a lecturer who cannot see WHICH
+                # marks are missing has no way to act on that refusal.
+                blank_criteria.append(criteria_lookup[criteria_id].name)
                 continue
 
             criteria = criteria_lookup[criteria_id]
@@ -333,6 +396,27 @@ def process_bulk_upload(
             db.add(event)
             success_count += 1
             touched_student_ids.add(student.id)
+
+        if blank_criteria:
+            incomplete_students.append({
+                "student_number": student_number,
+                "name": student.name or student_number,
+                "missing": blank_criteria,
+            })
+            # The student is named, not just the row number. A lecturer
+            # chasing a missing mark searches Moodle by name; a warning
+            # reading "row 43" makes them reopen the spreadsheet first.
+            who = student.name or student_number
+            warnings.append({
+                "row": row_number,
+                "student_number": student_number,
+                "criteria": ", ".join(blank_criteria),
+                "message": (
+                    f"{who} has no mark for {', '.join(blank_criteria)}. "
+                    "The row was imported; these criteria were left unscored, "
+                    "which may hold the student's risk level back for review."
+                ),
+            })
 
         for criteria_id, weekly_columns in weekly_criteria_column_map.items():
             criteria = criteria_lookup[criteria_id]
@@ -365,6 +449,8 @@ def process_bulk_upload(
     batch.values_stored = success_count
     batch.values_failed = len(errors)
 
+    if include_incomplete_students:
+        return batch, errors, warnings, incomplete_students, touched_student_ids
     return batch, errors, warnings, touched_student_ids
 
 
@@ -372,9 +458,9 @@ def process_manual_entry(
     db: Session, unit_id: int, lecturer_id: int, student_number: str,
     name: Optional[str], email: Optional[str], program: Optional[str],
     gender: Optional[str], age: Optional[int],
-    scores: dict[int, float],
+        scores: dict[int, float],
     weekly_scores: Optional[dict[int, list]] = None,
-) -> tuple[list[AssessmentEvent], list[dict], list[dict]]:
+) -> tuple[list[AssessmentEvent], list[dict], list[dict], bool, bool]:
     """
     Same validation path as bulk upload, minus the IngestionBatch -
     there's no file to group a single manual entry under, so batch_id
@@ -385,6 +471,16 @@ def process_manual_entry(
     aggregation logic as bulk upload - a lecturer typing 7 weekly
     values manually gets an identical percentage + trend calculation
     to a CSV column doing the same thing.
+
+    Returns (events, errors, warnings, student_created, enrollment_created).
+
+    The two booleans exist because resolve_or_create_* are deliberately
+    silent about which branch they took - reusing an existing student is
+    the CORRECT behaviour, not a warning-worthy event. But a caller
+    showing a lecturer "student added" when the student already existed
+    and was merely given new scores is telling them something false.
+    Only the caller knows whether that distinction matters, so the fact
+    is reported rather than acted on here.
     """
     weekly_scores = weekly_scores or {}
     all_criteria_ids = list(scores.keys()) + list(weekly_scores.keys())
@@ -393,15 +489,31 @@ def process_manual_entry(
     errors: list[dict] = []
     warnings: list[dict] = []
 
+    # Checked BEFORE resolve_or_create_* runs, since afterwards a
+    # created row and a pre-existing one are indistinguishable. Two
+    # cheap indexed lookups; deliberately not folded into the shared
+    # helpers, which bulk upload also calls on a per-row hot path.
+    student_existed = (
+        db.query(Student).filter(Student.student_number == student_number).first()
+        is not None
+    )
+
     try:
         student, warning = resolve_or_create_student(
             db, student_number, name, email, program, gender, age
         )
     except ValueError as e:
-        return [], [{"reason": str(e)}], []
+        return [], [{"reason": str(e)}], [], False, False
 
     if warning:
         warnings.append({"student_number": student_number, "message": warning})
+
+    enrollment_existed = (
+        db.query(Enrollment)
+        .filter(Enrollment.student_id == student.id, Enrollment.unit_id == unit_id)
+        .first()
+        is not None
+    )
 
     resolve_or_create_enrollment(db, student.id, unit_id)
 
@@ -440,4 +552,10 @@ def process_manual_entry(
         db.add(event)
         created_events.append(event)
 
-    return created_events, errors, warnings
+    return (
+        created_events,
+        errors,
+        warnings,
+        not student_existed,
+        not enrollment_existed,
+    )
